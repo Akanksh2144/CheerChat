@@ -56,12 +56,14 @@ class _SearchScreenState extends State<SearchScreen> {
           FocusScope.of(context).unfocus();
         },
         child: Padding(
-          padding: EdgeInsets.only(
-            top: 30,
-            left: 30,
-            right: 30,
-            bottom: MediaQuery.of(context).viewInsets.bottom,
+          padding: EdgeInsets.symmetric(
+            vertical: 20,
+            horizontal: 30,
           ),
+          // top: 30,
+          // left: 30,
+          // right: 30,
+          // bottom: MediaQuery.of(context).viewInsets.bottom,
           child: Column(
             children: [
               const SizedBox(height: 10),
@@ -126,11 +128,10 @@ class _SearchScreenState extends State<SearchScreen> {
 
               const SizedBox(height: 20),
 
-              /// 🔹 Filters header + buttons (fixed)
               Column(
                 children: [
                   const Text(
-                    "Filters",
+                    "Filter by",
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -180,7 +181,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     alignment: Alignment.topCenter,
                     child: selectedFilter == FilterType.country
                         ? SingleChildScrollView(
-                          child: CountryFilter(
+                            child: CountryFilter(
                               key: const ValueKey('country'),
                               countries: [
                                 'All',
@@ -197,7 +198,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                 });
                               },
                             ),
-                        )
+                          )
                         : SingleChildScrollView(
                             child: LanguageFilter(
                               key: const ValueKey('language'),
@@ -224,59 +225,72 @@ class _SearchScreenState extends State<SearchScreen> {
               const SizedBox(height: 12),
 
               /// 🔹 Bottom buttons (fixed)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () {
-                      FocusScope.of(context).unfocus();
-                      _idController.clear();
-                      Navigator.pop(context);
-                    },
-                    child: const Text("Close"),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    // onPressed: hasSelection
-                    //     ? _applyFilters
-                    //     : null,
-                    onPressed: hasSelection
-                        ? () {
-                            FocusScope.of(context).unfocus();
+              AnimatedPadding(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.only(
+                  bottom:
+                      MediaQuery.of(context).viewInsets.bottom >
+                          0
+                      ? 0
+                      : 25,
+                  top:
+                      MediaQuery.of(context).viewInsets.bottom >
+                          0
+                      ? 0
+                      : 16,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        FocusScope.of(context).unfocus();
+                        _idController.clear();
+                        Navigator.pop(context);
+                      },
+                      child: const Text("Close"),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: hasSelection
+                          ? () {
+                              FocusScope.of(context).unfocus();
 
-                            if (_idController.text.isNotEmpty) {
-                              Navigator.pop(context, {
-                                'type': FilterType.id,
-                                'value': _idController.text
-                                    .trim(),
-                              });
-                              return;
+                              if (_idController
+                                  .text
+                                  .isNotEmpty) {
+                                Navigator.pop(context, {
+                                  'type': FilterType.id,
+                                  'value': _idController.text
+                                      .trim(),
+                                });
+                                return;
+                              }
+
+                              if (selectedCountry != "All") {
+                                Navigator.pop(context, {
+                                  'type': FilterType.country,
+                                  'value': selectedCountry,
+                                });
+                                return;
+                              }
+
+                              if (selectedLanguage != "All") {
+                                Navigator.pop(context, {
+                                  'type': FilterType.language,
+                                  'value': selectedLanguage,
+                                });
+                                return;
+                              }
+
+                              Navigator.pop(context);
                             }
-
-                            if (selectedCountry != "All") {
-                              Navigator.pop(context, {
-                                'type': FilterType.country,
-                                'value': selectedCountry,
-                              });
-                              return;
-                            }
-
-                            if (selectedLanguage != "All") {
-                              Navigator.pop(context, {
-                                'type': FilterType.language,
-                                'value': selectedLanguage,
-                              });
-                              return;
-                            }
-
-                            Navigator.pop(
-                              context,
-                            ); // nothing selected
-                          }
-                        : null,
-                    child: const Text("Apply Filters"),
-                  ),
-                ],
+                          : null,
+                      child: const Text("Apply Filters"),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
