@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:judotalk/data/hosts_data.dart';
 import 'package:judotalk/models/host_card.dart';
 import 'package:judotalk/screens/search_screen.dart';
+import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 
 class HostsGridViewScreen extends StatefulWidget {
   const HostsGridViewScreen({super.key});
@@ -16,13 +17,8 @@ class HostsGridViewScreen extends StatefulWidget {
 
 class _HostsGridViewScreenState
     extends State<HostsGridViewScreen> {
-  
-
   void _openFilterOverlay() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (ctx) => SearchScreen()),
-    );
+    pushScreenWithoutNavBar(context, SearchScreen());
   }
 
   @override
@@ -44,7 +40,6 @@ class _HostsGridViewScreenState
             },
           ),
           const SizedBox(width: 10),
-          
         ],
       ),
       body: SafeArea(
