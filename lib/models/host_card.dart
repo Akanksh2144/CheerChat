@@ -186,7 +186,7 @@ class _HostCardState extends State<HostCard> {
                               const SizedBox(width: 10),
                               _ageChip(age),
                               const SizedBox(width: 10),
-                              _levelChip('Level 1'),
+                              _levelChip(widget.host.level),
                             ],
                           ),
                         ],

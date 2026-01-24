@@ -1,50 +1,106 @@
+import 'package:flag/flag.dart';
 import 'package:flutter/material.dart';
 import 'package:judotalk/widgets/chat_tile.dart';
 
 import 'chat_screen.dart';
 
+class InboxChat {
+  final String name;
+  final String level;
+  final String lastMessage;
+  final int unread;
+  final FlagsCode flagscode;
+  final Image? image;
+  final String time;
+
+  const InboxChat({
+    required this.name,
+    required this.level,
+    required this.lastMessage,
+    required this.unread,
+    required this.flagscode,
+    this.image,
+    required this.time,
+  });
+}
+
 class InboxScreen extends StatelessWidget {
-  const InboxScreen({super.key});
+  InboxScreen({super.key});
 
   /// Temporary mock data (replace with backend)
-  static final List<Map<String, dynamic>> chats = [
-    {
-      "name": "Ananya",
-      "lastMessage": "Hey! Are you free now?",
-      "time": "2:15 PM",
-      "unread": 2,
-      "image": null,
-    },
-    {
-      "name": "Rahul",
-      "lastMessage": "Call me later",
-      "time": "Yesterday",
-      "unread": 0,
-      "image": null,
-    },
-    {
-      "name": "Priya",
-      "lastMessage": "😂😂",
-      "time": "Mon",
-      "unread": 5,
-      "image": null,
-    },
+  final List<InboxChat> chats = [
+    InboxChat(
+      name: "Ananya",
+      level: "level 1",
+      lastMessage: "Hey! Are you free now?",
+      unread: 2,
+      flagscode: FlagsCode.PK,
+      time: "2:15 PM",
+    ),
+    InboxChat(
+      name: "Rahul",
+      level: "level 2",
+      lastMessage: "Call me later",
+      unread: 0,
+      flagscode: FlagsCode.SA,
+      time: "Yesterday",
+    ),
+    InboxChat(
+      name: "Rahul",
+      level: "level 3",
+      lastMessage: "Call me later",
+      unread: 0,
+      flagscode: FlagsCode.IN,
+      time: "Yesterday",
+    ),
+    InboxChat(
+      name: "Rahul",
+      level: "level 2",
+      lastMessage: "Call me later",
+      unread: 0,
+      flagscode: FlagsCode.PK,
+      time: "Yesterday",
+    ),
+    InboxChat(
+      name: "Rahul",
+      level: "level 2",
+      lastMessage: "Call me later",
+      unread: 0,
+      flagscode: FlagsCode.MA,
+      time: "Yesterday",
+    ),
+    InboxChat(
+      name: "Rahul",
+      level: "level 2",
+      lastMessage: "Call me later",
+      unread: 0,
+      flagscode: FlagsCode.BD,
+      time: "Yesterday",
+    ),
+    InboxChat(
+      name: "Rahul",
+      level: "level 2",
+      lastMessage: "Call me later",
+      unread: 0,
+      flagscode: FlagsCode.SA,
+      time: "Yesterday",
+    ),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Chats"), elevation: 1),
+      appBar: AppBar(
+        title: const Text("Messages"),
+        elevation: 1,
+      ),
       body: ListView.separated(
         itemCount: chats.length,
-        separatorBuilder: (_, __) => const Divider(height: 0),
+        separatorBuilder: (_, __) => const Divider(height: 14),
         itemBuilder: (context, index) {
           final chat = chats[index];
           return ChatTile(
-            name: chat["name"],
-            lastMessage: chat["lastMessage"],
-            time: chat["time"],
-            unreadCount: chat["unread"],
+            chat: chat,
             onTap: () {
               Navigator.push(
                 context,
