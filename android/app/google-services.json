@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "739076896699",
+    "project_id": "judotalk-c3d8d",
+    "storage_bucket": "judotalk-c3d8d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:739076896699:android:ec7cc02b532a47aa2cf69e",
+        "android_client_info": {
+          "package_name": "com.example.judotalk"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAlqJ1SmlAv7paIp7zNGdeGf42fM2oWM6A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

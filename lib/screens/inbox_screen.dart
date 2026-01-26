@@ -1,6 +1,7 @@
 import 'package:flag/flag.dart';
 import 'package:flutter/material.dart';
 import 'package:judotalk/widgets/chat_tile.dart';
+import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 
 import 'chat_screen.dart';
 
@@ -102,10 +103,11 @@ class InboxScreen extends StatelessWidget {
           return ChatTile(
             chat: chat,
             onTap: () {
-              Navigator.push(
+              pushScreenWithoutNavBar(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const ChatScreen(),
+                ChatScreen(
+                  otherUserId: 'user2',
+                  otherUserName: chat.name,
                 ),
               );
             },

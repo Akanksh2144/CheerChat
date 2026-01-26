@@ -7,6 +7,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:judotalk/data/country_data.dart';
 import 'package:judotalk/data/hosts_data.dart';
+import 'package:judotalk/screens/profile_details_screen.dart';
+import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 
 Widget _ageChip(int age) => Container(
   padding: const EdgeInsets.all(3.5),
@@ -81,6 +83,12 @@ class _HostCardState extends State<HostCard> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
+        onTap: () {
+          pushScreenWithoutNavBar(
+            context,
+            ProfileDetailsScreen(host: widget.host),
+          );
+        },
         onDoubleTap: _toggleFavorite,
         child: Stack(
           fit: StackFit.expand,
