@@ -3,7 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:judotalk/data/hosts_data.dart';
 import 'package:judotalk/models/host_card.dart';
-import 'package:judotalk/screens/search_screen.dart';
+import 'package:judotalk/screens/filters_screen.dart';
 import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 
 class HostsGridViewScreen extends StatefulWidget {
@@ -16,9 +16,29 @@ class HostsGridViewScreen extends StatefulWidget {
 }
 
 class _HostsGridViewScreenState
-    extends State<HostsGridViewScreen> {
+    extends State<HostsGridViewScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
   void _openFilterOverlay() {
-    pushScreenWithoutNavBar(context, SearchScreen());
+    pushScreenWithoutNavBar(context, FiltersScreen());
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+      lowerBound: 0,
+      upperBound: 1,
+    );
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   @override
@@ -42,31 +62,40 @@ class _HostsGridViewScreenState
           const SizedBox(width: 10),
         ],
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.only(
-            top: 5,
-            left: 16,
-            right: 16,
+      body: AnimatedBuilder(
+        animation: _animationController,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.only(
+              top: 5,
+              left: 16,
+              right: 16,
+            ),
+            child: GridView.builder(
+              itemCount: hostData.length,
+              cacheExtent: 800,
+              gridDelegate:
+                  const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 14.0,
+                    crossAxisSpacing: 14.0,
+                    childAspectRatio: 6 / 8,
+                  ),
+              itemBuilder: (context, index) {
+                final host = hostData[index];
+                return HostCard(
+                  key: ValueKey(hostData[index]),
+                  host: host,
+                );
+              },
+            ),
           ),
-          child: GridView.builder(
-            itemCount: hostData.length,
-            cacheExtent: 800,
-            gridDelegate:
-                const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 14.0,
-                  crossAxisSpacing: 14.0,
-                  childAspectRatio: 6 / 8,
-                ),
-            itemBuilder: (context, index) {
-              final host = hostData[index];
-              return HostCard(
-                key: ValueKey(hostData[index]),
-                host: host,
-              );
-            },
+        ),
+        builder: (context, child) => Padding(
+          padding: EdgeInsetsGeometry.only(
+            top: 100 - _animationController.value * 100,
           ),
+          child: child,
         ),
       ),
     );

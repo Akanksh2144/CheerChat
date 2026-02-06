@@ -7,7 +7,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:judotalk/data/country_data.dart';
 import 'package:judotalk/data/hosts_data.dart';
-import 'package:judotalk/screens/profile_details_screen.dart';
+import 'package:judotalk/screens_notcompleted/profile_details_screen.dart';
 import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 
 Widget _ageChip(int age) => Container(
@@ -93,10 +93,15 @@ class _HostCardState extends State<HostCard> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.asset(
-              'assets/default_profile/default_profile_photo.jpg',
-              fit: BoxFit.cover,
-            ),
+            widget.host.images!.isEmpty
+                ? Image.asset(
+                    'assets/default_profile/default_profile_photo.jpg',
+                    fit: BoxFit.cover,
+                  )
+                : Image.network(
+                    widget.host.images![0],
+                    fit: BoxFit.cover,
+                  ),
 
             /// Heart icon
             Positioned(

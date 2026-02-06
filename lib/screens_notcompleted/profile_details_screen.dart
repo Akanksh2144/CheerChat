@@ -142,16 +142,16 @@ class ProfileDetailsScreen extends StatelessWidget {
   }
 
   /// 🔹 Section Content Widget
-  Widget _sectionContent(String content) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Text(
-        content,
-        style: TextStyle(
-          fontSize: 15,
-          color: Colors.grey.shade700,
-        ),
-      ),
-    );
-  }
+  // Widget _sectionContent(String content) {
+  //   return Padding(
+  //     padding: const EdgeInsets.symmetric(horizontal: 16),
+  //     child: Text(
+  //       content,
+  //       style: TextStyle(
+  //         fontSize: 15,
+  //         color: Colors.grey.shade700,
+  //       ),
+  //     ),
+  //   );
+  // }
 }

@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:judotalk/widgets/nav_bar.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Global key to access the scaffold messenger
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
@@ -18,7 +19,7 @@ void main() async {
   if (auth.currentUser == null) {
     await auth.signInAnonymously();
   }
-  runApp(const MyApp());
+  runApp(const ProviderScope(child: MyApp()));
 }
 
 class MyApp extends StatelessWidget {

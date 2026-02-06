@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:judotalk/screens/call_history.dart';
+import 'package:judotalk/screens/chat_screen.dart';
+import 'package:judotalk/screens_notcompleted/call_history.dart';
 import 'package:judotalk/screens/hosts_grid_view.dart';
 import 'package:judotalk/screens/inbox_screen.dart';
-import 'package:judotalk/screens/profile_screen.dart';
-import 'package:judotalk/screens/random_call_screen.dart';
+import 'package:judotalk/screens_notcompleted/profile_screen.dart';
+import 'package:judotalk/screens_notcompleted/random_call_screen.dart';
 import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 
 class PersistenBottomNavBar extends StatefulWidget {
@@ -49,7 +50,7 @@ class _PersistenBottomNavBarState
           ),
         ),
         PersistentTabConfig(
-          screen: InboxScreen(),
+          screen: ChatScreen(),
           item: ItemConfig(
             icon: FaIcon(FontAwesomeIcons.solidMessage),
             title: "Chat",
