@@ -2,8 +2,8 @@ import "package:flutter/material.dart";
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:judotalk/data/hosts_data.dart';
-import 'package:judotalk/models/host_card.dart';
 import 'package:judotalk/screens/filters_screen.dart';
+import 'package:judotalk/widgets/cards/host_card.dart';
 import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 
 class HostsGridViewScreen extends StatefulWidget {
@@ -19,6 +19,8 @@ class _HostsGridViewScreenState
     extends State<HostsGridViewScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
+  DateTime? lastBackPress;
+
   void _openFilterOverlay() {
     pushScreenWithoutNavBar(context, FiltersScreen());
   }
@@ -47,6 +49,7 @@ class _HostsGridViewScreenState
       appBar: AppBar(
         title: Text(
           "Connect",
+          // EmojiConverter.fromAlpha2CountryCode('IN'),
           style: GoogleFonts.lato(
             fontSize: 30,
             color: Colors.black,
@@ -73,7 +76,7 @@ class _HostsGridViewScreenState
             ),
             child: GridView.builder(
               itemCount: hostData.length,
-              cacheExtent: 800,
+              // cacheExtent: 800,
               gridDelegate:
                   const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,

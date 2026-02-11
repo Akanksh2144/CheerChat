@@ -1,7 +1,7 @@
 import 'package:flag/flag.dart';
 import 'package:flutter/material.dart';
 
-Widget CountryDetails() {
+Widget countryDetails() {
   return Container(
     decoration: BoxDecoration(
       color: Colors.amberAccent,

@@ -47,10 +47,12 @@ const List<HostData> hostData = [
     Country.india,
     HostStatus.offline,
     "level 2",
-    images: [
-      "https://media.istockphoto.com/id/1455397163/photo/portrait-of-indian-dark-pretty-girl.jpg?s=2048x2048&w=is&k=20&c=3NUASBYzvRvKn8H8J3OgILfKeAVTrY8-qihYmdjRVFA=",
-      "https://img.freepik.com/premium-photo/cute-girl-stock-photos-royalty-free-girl-images_152808-937.jpg",
-    ],
+    images: [],
+
+    // images: [
+    //   "https://media.istockphoto.com/id/1455397163/photo/portrait-of-indian-dark-pretty-girl.jpg?s=2048x2048&w=is&k=20&c=3NUASBYzvRvKn8H8J3OgILfKeAVTrY8-qihYmdjRVFA=",
+    //   "https://img.freepik.com/premium-photo/cute-girl-stock-photos-royalty-free-girl-images_152808-937.jpg",
+    // ],
   ),
   HostData(
     "Maya",

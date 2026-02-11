@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:judotalk/screens/chat_screen.dart';
-import 'package:judotalk/screens_notcompleted/call_history.dart';
-import 'package:judotalk/screens/hosts_grid_view.dart';
-import 'package:judotalk/screens/inbox_screen.dart';
-import 'package:judotalk/screens_notcompleted/profile_screen.dart';
-import 'package:judotalk/screens_notcompleted/random_call_screen.dart';
 import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 
-class PersistenBottomNavBar extends StatefulWidget {
-  const PersistenBottomNavBar({super.key});
+import 'package:judotalk/screens/hosts_grid_view.dart';
+import 'package:judotalk/screens/inbox_screen.dart';
+import 'package:judotalk/screens_notcompleted/call_history.dart';
+import 'package:judotalk/screens_notcompleted/profile_screen.dart';
+import 'package:judotalk/screens_notcompleted/random_call_screen.dart';
+
+class PersistentBottomNavBar extends StatefulWidget {
+  const PersistentBottomNavBar({super.key});
   @override
   State<StatefulWidget> createState() {
-    return _PersistenBottomNavBarState();
+    return _PersistentBottomNavBarState();
   }
 }
 
-class _PersistenBottomNavBarState
-    extends State<PersistenBottomNavBar> {
+class _PersistentBottomNavBarState
+    extends State<PersistentBottomNavBar> {
   final PersistentTabController _controller =
       PersistentTabController(initialIndex: 0);
 
@@ -44,13 +44,22 @@ class _PersistenBottomNavBarState
         ),
         PersistentTabConfig(
           screen: RandomCallScreen(),
+          // screen: InboxScreen(),
           item: ItemConfig(
             icon: FaIcon(FontAwesomeIcons.shuffle),
             title: "Random Call",
           ),
         ),
         PersistentTabConfig(
-          screen: ChatScreen(),
+          screen: InboxScreen(
+            // child: ChatScreen(
+            //   otherUserId:
+            //       "abmy04pG6Ye1bcIycJyZOQFx61x2", // Replace with a real ID when you have users
+            //   otherUserName: "Akanksh",
+            //   // otherUserId: '8b2f6dEZlXZU4VOVjtWXtT3sCuD2',
+            //   // otherUserName: 'Akash',
+            // ),
+          ),
           item: ItemConfig(
             icon: FaIcon(FontAwesomeIcons.solidMessage),
             title: "Chat",

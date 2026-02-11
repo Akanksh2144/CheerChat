@@ -77,9 +77,58 @@ extension CountryExtension on Country {
         return FlagsCode.VN;
     }
   }
+
+  String get countryCode {
+    switch (this) {
+      case Country.india:
+        return 'IN';
+      case Country.bangladesh:
+        return 'BD';
+      case Country.pakistan:
+        return 'PK';
+      case Country.argentina:
+        return 'AR';
+      case Country.australia:
+        return 'AU';
+      case Country.brazil:
+        return 'BR';
+      case Country.bahrain:
+        return 'BH';
+      case Country.canada:
+        return 'CA';
+      case Country.colombia:
+        return 'CO';
+      case Country.egypt:
+        return 'EG';
+      case Country.germany:
+        return 'DE';
+      case Country.indonesia:
+        return 'ID';
+      case Country.morocco:
+        return 'MA';
+      case Country.nepal:
+        return 'NP';
+      case Country.philippines:
+        return 'PH';
+      case Country.saudiaArabia:
+        return 'SA';
+      case Country.turkey:
+        return 'TR';
+      case Country.unitedStates:
+        return 'US';
+      case Country.unitedKingdom:
+        return 'GB';
+      case Country.unitedArabEmirates:
+        return 'AE';
+      case Country.ukraine:
+        return 'UA';
+      case Country.venezuala:
+        return 'VE';
+      case Country.vietnam:
+        return 'VN';
+    }
+  }
 }
-
-
 
 const Map<Country, String> countryNames = {
   Country.india: "India",
