@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
-
 import 'package:judotalk/screens/hosts_grid_view.dart';
 import 'package:judotalk/screens/inbox_screen.dart';
 import 'package:judotalk/screens_notcompleted/call_history.dart';
 import 'package:judotalk/screens_notcompleted/profile_screen.dart';
 import 'package:judotalk/screens_notcompleted/random_call_screen.dart';
+import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 
 class PersistentBottomNavBar extends StatefulWidget {
   const PersistentBottomNavBar({super.key});
@@ -24,7 +23,7 @@ class _PersistentBottomNavBarState
   @override
   Widget build(BuildContext context) {
     return PersistentTabView(
-      gestureNavigationEnabled: true,
+      gestureNavigationEnabled: false,
       controller: _controller,
       tabs: [
         PersistentTabConfig(
@@ -34,9 +33,13 @@ class _PersistentBottomNavBarState
             title: "Connect",
           ),
         ),
-
         PersistentTabConfig(
           screen: CallHistory(),
+          // screen: ChatScreen(
+          //   otherUserId:
+          //       "ES74l80aRRYgplWEcssfNy48Ul72", //otherUserId!,
+          //   otherUserName: 'name',
+          // ),
           item: ItemConfig(
             icon: FaIcon(FontAwesomeIcons.clockRotateLeft),
             title: "History",
@@ -50,16 +53,19 @@ class _PersistentBottomNavBarState
             title: "Random Call",
           ),
         ),
+        // PersistentTabConfig(
+        //   screen: ChatScreen(
+        //     otherUserId:
+        //         "PPoSN7U9A0NcCXWx46rJUDI5ecw2", //otherUserId!,
+        //     otherUserName: 'Pixel XL Pro',
+        //   ),
+        //   item: ItemConfig(
+        //     icon: FaIcon(FontAwesomeIcons.shuffle),
+        //     title: "Random Call",
+        //   ),
+        // ),
         PersistentTabConfig(
-          screen: InboxScreen(
-            // child: ChatScreen(
-            //   otherUserId:
-            //       "abmy04pG6Ye1bcIycJyZOQFx61x2", // Replace with a real ID when you have users
-            //   otherUserName: "Akanksh",
-            //   // otherUserId: '8b2f6dEZlXZU4VOVjtWXtT3sCuD2',
-            //   // otherUserName: 'Akash',
-            // ),
-          ),
+          screen: InboxScreen(),
           item: ItemConfig(
             icon: FaIcon(FontAwesomeIcons.solidMessage),
             title: "Chat",

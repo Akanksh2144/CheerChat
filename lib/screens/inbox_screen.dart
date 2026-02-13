@@ -20,6 +20,7 @@ class _InboxScreenState extends State<InboxScreen> {
 
   @override
   Widget build(BuildContext context) {
+    print(_auth.currentUser!.uid);
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -62,144 +63,152 @@ class _InboxScreenState extends State<InboxScreen> {
               final data =
                   docs[index].data() as Map<String, dynamic>;
 
-              // 2. LOGIC TO FIND "THE OTHER USER"
-              // Your participants array contains [uid1, uid2].
-              // We need to find the one that is NOT the current user.
-              final List<dynamic> participants =
-                  data['participantIds'] ?? [];
               final currentUid = _auth.currentUser!.uid;
 
-              String otherUserId =
-                  "abmy04pG6Ye1bcIycJyZOQFx61x2";
-              for (var id in participants) {
+              // Get participants list
+              final List<dynamic> participantIds =
+                  data['participantIds'] ?? [];
+
+              // Find the other user ID
+              String? otherUserId;
+              for (var id in participantIds) {
                 if (id != currentUid) {
                   otherUserId = id;
-                  print(otherUserId);
                   break;
                 }
               }
 
-              // 3. FETCH OTHER USER DETAILS
-              // Since your 'conversations' doc currently only stores UIDs (based on your service code),
-              // we need to fetch the User's name/photo.
-              // Ideally, you should store name/photo in the conversation doc to avoid this extra read,
-              // but for now, we will fetch it here.
-              return FutureBuilder<DocumentSnapshot>(
-                future: FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(otherUserId)
-                    .get(),
-                builder: (context, userSnapshot) {
-                  // Default placeholders while loading user details
-                  String name = "Loading...";
-                  String image = "";
+              if (otherUserId == null) {
+                return const SizedBox();
+              }
 
-                  if (userSnapshot.hasData &&
-                      userSnapshot.data!.exists) {
-                    final userData =
-                        userSnapshot.data!.data()
-                            as Map<String, dynamic>;
-                    name =
-                        userData['name'] ??
-                        "User"; // Replace 'name' with your actual user field
-                    image =
-                        userData['profileImage'] ??
-                        ""; // Replace 'profileImage' with actual field
-                  }
+              // Get participants snapshot map
+              final Map<String, dynamic> participantsMap =
+                  Map<String, dynamic>.from(
+                    data['participants'] ?? {},
+                  );
 
-                  // 4. INBOX TILE UI
-                  return InkWell(
-                    onLongPress: () {},
-                    onTap: () {
-                      pushScreenWithoutNavBar(
-                        context,
-                        ChatScreen(
-                          otherUserId: otherUserId,
-                          otherUserName: name,
-                        ),
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      child: Row(
-                        children: [
-                          // Avatar
-                          CircleAvatar(
-                            radius: 28,
-                            backgroundColor: Colors.grey[200],
-                            backgroundImage: image.isNotEmpty
-                                ? CachedNetworkImageProvider(
-                                    image,
-                                  )
-                                : null,
-                            child: image.isEmpty
-                                ? const Icon(
-                                    Icons.person,
-                                    color: Colors.grey,
-                                  )
-                                : null,
-                          ),
-                          const SizedBox(width: 16),
+              final Map<String, dynamic>? otherUserData =
+                  participantsMap[otherUserId];
 
-                          // Name & Message
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  name,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  data['lastMessage'] ?? "",
-                                  maxLines: 1,
-                                  overflow:
-                                      TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey[600],
-                                    // Make text bold if the last sender wasn't me (Unread logic simulation)
-                                    fontWeight:
-                                        data['lastSenderId'] !=
-                                            currentUid
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+              final String name =
+                  otherUserData?['name'] ?? "User";
 
-                          // Time & Status
-                          Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                _formatTimestamp(
-                                  data['lastMessageTime'],
-                                ),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[500],
-                                ),
-                              ),
-                              // Optional: Add Unread Dot here later
-                            ],
-                          ),
-                        ],
-                      ),
+              final String image =
+                  otherUserData?['profileImage'] ?? "";
+
+              final Map<String, dynamic> unreadMap =
+                  Map<String, dynamic>.from(
+                    data['unreadCount'] ?? {},
+                  );
+
+              final int unread = unreadMap[currentUid] ?? 0;
+
+              return InkWell(
+                onLongPress: () {
+                  _showChatOptions(
+                    context,
+                    docs[index].id,
+                    data['isPinned'] ?? false,
+                  );
+                },
+
+                onTap: () {
+                  pushScreenWithoutNavBar(
+                    context,
+                    ChatScreen(
+                      otherUserId: otherUserId!,
+                      otherUserName: name,
                     ),
                   );
                 },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundColor: Colors.grey[200],
+                        backgroundImage: image.isNotEmpty
+                            ? CachedNetworkImageProvider(image)
+                            : null,
+                        child: image.isEmpty
+                            ? const Icon(
+                                Icons.person,
+                                color: Colors.grey,
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              data['lastMessage'] ?? "",
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[600],
+                                fontWeight:
+                                    data['lastSenderId'] !=
+                                        currentUid
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            _formatTimestamp(
+                              data['lastMessageTime'],
+                            ),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                          if (unread > 0)
+                            Container(
+                              margin: const EdgeInsets.only(
+                                top: 4,
+                              ),
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                unread.toString(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               );
             },
           );
@@ -245,5 +254,52 @@ class _InboxScreenState extends State<InboxScreen> {
     } else {
       return DateFormat('dd/MM').format(date);
     }
+  }
+
+  void _showChatOptions(
+    BuildContext context,
+    String chatId,
+    bool isPinned,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Chat Options"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.push_pin),
+                title: Text(
+                  isPinned ? "Unpin Chat" : "Pin Chat",
+                ),
+                onTap: () async {
+                  await FirebaseFirestore.instance
+                      .collection('conversations')
+                      .doc(chatId)
+                      .update({'isPinned': !isPinned});
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.delete,
+                  color: Colors.red,
+                ),
+                title: const Text("Delete Chat"),
+                onTap: () async {
+                  await FirebaseFirestore.instance
+                      .collection('conversations')
+                      .doc(chatId)
+                      .delete();
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

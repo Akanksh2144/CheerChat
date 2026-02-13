@@ -100,21 +100,61 @@ class _AuthGuardState extends State<AuthGuard> {
   // We use a Future to track the login process
   late Future<User?> _authFuture;
 
+  
+
+
   @override
   void initState() {
     super.initState();
     _authFuture = _signInIfNeeded();
   }
 
+  Future<void> _createUserIfNotExists(User user) async {
+    final userDoc = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid);
+
+    final snapshot = await userDoc.get();
+
+    if (!snapshot.exists) {
+      await userDoc.set({
+        'uid': user.uid,
+        'isAnonymous': user.isAnonymous,
+        'name': '',
+        'photoUrl': '',
+        'role': 'user',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+  }
+
+  // Future<User?> _signInIfNeeded() async {
+  //   final auth = FirebaseAuth.instance;
+  //   if (auth.currentUser == null) {
+  //     // Sign in anonymously if no user exists
+  //     final cred = await auth.signInAnonymously();
+  //     return cred.user;
+  //   }
+  //   return auth.currentUser;
+  // }
+
   Future<User?> _signInIfNeeded() async {
     final auth = FirebaseAuth.instance;
-    if (auth.currentUser == null) {
-      // Sign in anonymously if no user exists
+
+    User? user = auth.currentUser;
+
+    if (user == null) {
       final cred = await auth.signInAnonymously();
-      return cred.user;
+      user = cred.user;
     }
-    return auth.currentUser;
+
+    if (user != null) {
+      await _createUserIfNotExists(user);
+    }
+
+    return user;
   }
+
 
   @override
   Widget build(BuildContext context) {

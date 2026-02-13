@@ -34,6 +34,7 @@ class ChatService {
     Map<String, dynamic>? extraData,
   }) async {
     final currentUserId = _auth.currentUser!.uid;
+    await initializeChatIfNew(receiverId);
 
     // 1. Get the Room Reference (UserA_UserB) - THIS IS THE PARENT
     final chatRoomId = getChatRoomId(currentUserId, receiverId);
@@ -59,15 +60,9 @@ class ChatService {
         'status': 'sent',
         if (extraData != null) ...extraData,
       });
-      // await roomRef.set({
-      //   'lastMessage': lastMessagePreview,
-      //   'lastMessageTime': timestamp,
-      //   'lastSenderId': currentUserId,
-      //   'isDeleted': false,
-      // }, SetOptions(merge: true));
 
       // 4. PREPARE INBOX PREVIEW
-      // String lastMessagePreview = text;
+
       final String lastMessagePreview =
           {
             'image': '📷 Image',
@@ -76,27 +71,15 @@ class ChatService {
           }[type] ??
           text;
 
-      // if (type == 'image') lastMessagePreview = '📷 Image';
-      // if (type == 'lottie') lastMessagePreview = 'Smiley 😍';
-      // if (type == 'gift') lastMessagePreview = 'Gift 🎁';
-
-      // 5. Step B: Update the ROOM (Metadata for Inbox)
-      // 🔥 FIX: We update roomRef, NOT messageRef
-      // await roomRef.set(
-      //   {
-      //     'participantIds': [currentUserId, receiverId],
-      //     'lastMessage': lastMessagePreview,
-      //     'lastMessageTime': timestamp,
-      //     'lastSenderId': currentUserId,
-      //     'isDeleted': false,
-      //   },
-      //   SetOptions(merge: true),
-      // ); // merge: true preserves other fields like expiryTime
       await roomRef.set({
         'lastMessage': lastMessagePreview,
         'lastMessageTime': timestamp,
+        'lastMessageType': type,
+        'lastMessageId': messageRef.id,
         'lastSenderId': currentUserId,
         'isDeleted': false,
+        'unreadCount': {receiverId: FieldValue.increment(1)},
+        // 'unreadCount.$receiverId': FieldValue.increment(1),
       }, SetOptions(merge: true));
     } catch (e) {
       debugPrint("Error sending message: $e");
@@ -129,33 +112,6 @@ class ChatService {
     );
   }
 
-  // Future<void> deleteMessage({
-  //   required String otherUserId,
-  //   required String messageId,
-  // }) async {
-  //   final currentUserId = _auth.currentUser!.uid;
-  //   final chatRoomId = getChatRoomId(currentUserId, otherUserId);
-
-  //   final messageRef = _db
-  //       .collection('conversations')
-  //       .doc(chatRoomId)
-  //       .collection('messages')
-  //       .doc(messageId);
-
-  //   final doc = await messageRef.get();
-  //   if (!doc.exists) return;
-
-  //   final data = doc.data()!;
-  //   final type = data['type'];
-  //   final storagePath = data['storagePath'];
-
-  //   // 🔥 delete image file
-  //   if (type == 'image' && storagePath != null) {
-  //     await _storage.ref(storagePath).delete();
-  //   }
-
-  //   await messageRef.delete();
-  // }
   Future<void> deleteMessage({
     required String otherUserId,
     required String messageId,
@@ -201,11 +157,12 @@ class ChatService {
             null, // Remove the path since file is gone
       });
       final roomDoc = await roomRef.get();
+
       if (roomDoc.exists &&
-          roomDoc.data()?['lastMessageTime'] ==
-              data['timestamp']) {
+          roomDoc.data()?['lastMessageId'] == messageId) {
         await roomRef.update({
           'lastMessage': '🚫 This message was deleted',
+          'lastMessageType': 'text',
         });
       }
     } catch (e) {
@@ -218,28 +175,7 @@ class ChatService {
   // ===========================================================================
   /// Call this when the user opens the chat screen for the first time.
   /// It sets the timer ONLY if the chat is brand new.
-  // Future<void> initializeChatIfNew(String otherUserId) async {
-  //   final currentUserId = _auth.currentUser!.uid;
-  //   final chatRoomId = getChatRoomId(currentUserId, otherUserId);
-  //   final roomRef = _db
-  //       .collection('conversations')
-  //       .doc(chatRoomId);
 
-  //   final doc = await roomRef.get();
-
-  //   // Only write if document doesn't exist yet
-  //   if (!doc.exists) {
-  //     await roomRef.set({
-  //       'participantIds': [currentUserId, otherUserId],
-  //       'expiryTime': DateTime.now().add(
-  //         const Duration(days: 7),
-  //       ), // 7 Days from now
-  //       'isUnlocked': false, // Locked by default
-  //       'lastMessage': 'Chat Started',
-  //       'lastMessageTime': FieldValue.serverTimestamp(),
-  //     });
-  //   }
-  // }
   Future<void> initializeChatIfNew(String otherUserId) async {
     final currentUserId = _auth.currentUser!.uid;
     final chatRoomId = getChatRoomId(currentUserId, otherUserId);
@@ -278,19 +214,69 @@ class ChatService {
           },
         },
 
-        'expiryTime': DateTime.now().add(
-          const Duration(days: 7),
-        ),
+        // 'expiryTime': DateTime.now().add(
+        //   const Duration(days: 7),
+        // ),
+        'expiryTime': null,
         'isUnlocked': false,
+
+        // 'isUnlocked': false,
         'isDeleted': false,
         'lastMessage': 'Chat Started',
+        'lastMessageType': 'system',
+        'lastMessageId': null,
         'lastSenderId': currentUserId,
+
+        'isPinned': false,
+        'unreadCount': {currentUserId: 0, otherUserId: 0},
+
         'lastMessageTime': FieldValue.serverTimestamp(),
         'createdAt': FieldValue.serverTimestamp(),
       });
     }
   }
 
+  // ... inside ChatService class ...
+
+  /// Resets the unread count for the current user in this chat
+  Future<void> markMessagesAsRead(String otherUserId) async {
+    final currentUserId = _auth.currentUser!.uid;
+    final chatRoomId = getChatRoomId(currentUserId, otherUserId);
+
+    final roomRef = _db
+        .collection('conversations')
+        .doc(chatRoomId);
+
+    try {
+      final doc = await roomRef.get();
+
+      if (!doc.exists) {
+        // Conversation not created yet → nothing to mark
+        return;
+      }
+
+      await roomRef.update({'unreadCount.$currentUserId': 0});
+    } catch (e) {
+      print("Error marking as read: $e");
+    }
+  }
+
+  // Future<void> markMessagesAsRead(String otherUserId) async {
+  //   final currentUserId = _auth.currentUser!.uid;
+  //   final chatRoomId = getChatRoomId(currentUserId, otherUserId);
+
+  //   try {
+  //     // We only update the specific field for the current user
+  //     await _db
+  //         .collection('conversations')
+  //         .doc(chatRoomId)
+  //         .update({'unreadCount.$currentUserId': 0});
+  //   } catch (e) {
+  //     // If the document doesn't exist yet or fails, we fail silently
+  //     // This prevents crashes if the chat is brand new
+  //     print("Error marking as read: $e");
+  //   }
+  // }
   // ===========================================================================
   // 4. STREAMS: Real-time Data for UI
   // ===========================================================================
@@ -321,6 +307,8 @@ class ChatService {
           'participantIds',
           arrayContains: currentUserId,
         ) // Using your Composite Index
+        // .orderBy('lastMessageTime', descending: true)
+        .orderBy('isPinned', descending: true)
         .orderBy('lastMessageTime', descending: true)
         .snapshots();
   }

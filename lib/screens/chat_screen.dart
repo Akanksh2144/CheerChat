@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -10,6 +11,7 @@ import 'package:judotalk/constants/gift_constants.dart';
 import 'package:judotalk/constants/lottie_constants.dart';
 import 'package:judotalk/services/chat_services.dart';
 import 'package:lottie/lottie.dart';
+import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 
 class ChatScreen extends StatefulWidget {
   final String otherUserId;
@@ -30,6 +32,12 @@ class _ChatScreenState extends State<ChatScreen>
   final ChatService _chatService = ChatService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  StreamSubscription? _messageSubscription;
+
+  bool _isLocked = true;
+  bool _hasUnlockedThisSession = false;
+  StreamSubscription<DocumentSnapshot>? _roomSubscription;
+
   // DashChat requires these "ChatUser" objects to know who is who
   late ChatUser _currentUser;
   late ChatUser _otherUser;
@@ -41,13 +49,47 @@ class _ChatScreenState extends State<ChatScreen>
   final FocusNode _inputFocusNode = FocusNode();
   bool _isInputFocused = false;
 
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0.0, // 0 is bottom in reversed chat
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
   void _sendMessage(ChatMessage message) async {
     if (message.text.trim().isEmpty) return;
+
+    if (_isLocked) {
+      final currentUserId = _auth.currentUser!.uid;
+      final chatRoomId = _chatService.getChatRoomId(
+        currentUserId,
+        widget.otherUserId,
+      );
+
+      await FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(chatRoomId)
+          .update({
+            'isUnlocked': true,
+            'expiryTime': DateTime.now().add(
+              const Duration(days: 7),
+            ),
+          });
+
+      setState(() {
+        _isLocked = false;
+        _hasUnlockedThisSession = true;
+      });
+    }
 
     await _chatService.sendMessage(
       receiverId: widget.otherUserId,
       text: message.text,
     );
+    _scrollToBottom();
   }
 
   bool _canDeleteForEveryone(ChatMessage message) {
@@ -108,24 +150,6 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
-  // Future<void> _pickImage() async {
-  //   final picker = ImagePicker();
-  //   final XFile? file = await picker.pickImage(
-  //     source: ImageSource.gallery,
-  //   );
-
-  //   if (file == null) return;
-
-  //   final result = await _chatService.uploadChatImage(
-  //     File(file.path),
-  //   );
-
-  //   await _chatService.sendImageMessage(
-  //     receiverId: widget.otherUserId,
-  //     imageUrl: result['url']!,
-  //     storagePath: result['path']!,
-  //   );
-  // }
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final XFile? file = await picker.pickImage(
@@ -155,6 +179,7 @@ class _ChatScreenState extends State<ChatScreen>
       'timestamp': FieldValue.serverTimestamp(),
       'isLocal': true,
     });
+    _scrollToBottom();
 
     try {
       // 2️⃣ Upload image
@@ -168,15 +193,8 @@ class _ChatScreenState extends State<ChatScreen>
         'storagePath': result['path'],
         'isLocal': false,
       });
-      await FirebaseFirestore.instance
-          .collection('conversations')
-          .doc(chatRoomId)
-          .set({
-            'lastMessage': '📷 Image',
-            'lastMessageTime': FieldValue.serverTimestamp(),
-            'lastSenderId': currentUserId,
-            'isDeleted': false,
-          }, SetOptions(merge: true));
+
+      _scrollToBottom();
     } catch (e) {
       await messageRef.update({'isUploadFailed': true});
     }
@@ -296,6 +314,7 @@ class _ChatScreenState extends State<ChatScreen>
       text: assetPath,
       type: 'gift', // Custom type for static images
     );
+    _scrollToBottom();
   }
 
   void _sendLottie(String assetPath) async {
@@ -305,11 +324,44 @@ class _ChatScreenState extends State<ChatScreen>
           assetPath, // Store the asset path string in Firestore
       type: 'lottie',
     );
+    _scrollToBottom();
   }
 
   @override
   void initState() {
     super.initState();
+
+    final currentUserId = _auth.currentUser!.uid;
+    final chatRoomId = _chatService.getChatRoomId(
+      currentUserId,
+      widget.otherUserId,
+    );
+
+    _roomSubscription = FirebaseFirestore.instance
+        .collection('conversations')
+        .doc(chatRoomId)
+        .snapshots()
+        .listen((doc) {
+          if (!doc.exists) return;
+
+          final data = doc.data() as Map<String, dynamic>;
+
+          final bool isUnlocked = data['isUnlocked'] ?? false;
+          final Timestamp? expiryTs = data['expiryTime'];
+
+          bool locked = true;
+
+          if (isUnlocked && expiryTs != null) {
+            final expiry = expiryTs.toDate();
+            locked = expiry.isBefore(DateTime.now());
+          }
+
+          if (mounted) {
+            setState(() {
+              _isLocked = locked;
+            });
+          }
+        });
 
     _inputFocusNode.addListener(() {
       setState(() {
@@ -319,7 +371,19 @@ class _ChatScreenState extends State<ChatScreen>
 
     WidgetsBinding.instance.addObserver(this);
 
+    _chatService.markMessagesAsRead(widget.otherUserId);
+
+    _messageSubscription = _chatService
+        .getMessages(widget.otherUserId)
+        .listen((event) {
+          if (mounted && event.docChanges.isNotEmpty) {
+            _chatService.markMessagesAsRead(widget.otherUserId);
+          }
+        });
+
     final uid = _auth.currentUser!.uid;
+    print('hi');
+    print(uid);
 
     _currentUser = ChatUser(
       id: uid,
@@ -353,9 +417,11 @@ class _ChatScreenState extends State<ChatScreen>
 
   @override
   void dispose() {
+    _roomSubscription?.cancel();
+
     _inputFocusNode.dispose();
     WidgetsBinding.instance.removeObserver(this);
-
+    _messageSubscription?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -383,16 +449,6 @@ class _ChatScreenState extends State<ChatScreen>
 
   @override
   Widget build(BuildContext context) {
-    // final isKeyboardOpen =
-    //     MediaQuery.of(context).viewInsets.bottom > 0;
-
-    // // 🔥 If keyboard closed but focus still active → unfocus
-    // if (!isKeyboardOpen && _inputFocusNode.hasFocus) {
-    //   Future.microtask(() => _inputFocusNode.unfocus());
-    // }
-
-    // _wasKeyboardOpen = isKeyboardOpen;
-
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
@@ -418,7 +474,7 @@ class _ChatScreenState extends State<ChatScreen>
                   child: Icon(
                     Icons.videocam_rounded,
                     color: Colors.green,
-                    size: 30,
+                    size: 35,
                   ),
                 ),
               ),
@@ -434,105 +490,89 @@ class _ChatScreenState extends State<ChatScreen>
               child: Text("Error loading messages"),
             );
           }
-
-          if (!snapshot.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
-          // if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          //   return Center(
-          //     child: Column(
-          //       mainAxisAlignment: MainAxisAlignment.center,
-          //       children: [
-          //         Icon(
-          //           Icons.chat_bubble_outline,
-          //           size: 80,
-          //           color: Colors.grey.shade300,
-          //         ),
-          //         const SizedBox(height: 16),
-          //         Text(
-          //           "No messages yet.",
-          //           style: TextStyle(
-          //             color: Colors.grey.shade500,
-          //             fontSize: 18,
-          //           ),
-          //         ),
-          //         Text(
-          //           "Say Hi! 👋",
-          //           style: TextStyle(
-          //             color: Colors.grey.shade400,
-          //           ),
-          //         ),
-          //       ],
-          //     ),
+          // if (snapshot.hasError) {
+          //   return const Center(
+          //     child: Text("Error loading messages"),
           //   );
           // }
+
+          // if (snapshot.connectionState ==
+          //     ConnectionState.waiting) {
+          //   return const Center(
+          //     child: CircularProgressIndicator(),
+          //   );
+          // }
+
+          // if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          //   return const Center(child: Text("No messages yet"));
+          // }
+
+          // final docs = snapshot.data!.docs;
+          final docs = snapshot.data?.docs ?? [];
 
           // 1. MAP FIRESTORE DATA TO DASH CHAT FORMAT
           // We take the raw docs and convert them into a list of ChatMessage objects
 
-          List<ChatMessage> messages =
-              snapshot.data!.docs.map((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                Timestamp? ts = data['timestamp'] as Timestamp?;
-                final type = data['type'];
-                final bool isDeleted =
-                    data['isDeleted'] ?? false;
-                // Use isDeleted to return the "🚫 This message was deleted" text
-                final bool isPending =
-                    doc.metadata.hasPendingWrites;
+          // List<ChatMessage> messages = snapshot.data!.docs.map((
+          List<ChatMessage> messages = docs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            Timestamp? ts = data['timestamp'] as Timestamp?;
+            final type = data['type'];
+            final bool isDeleted = data['isDeleted'] ?? false;
+            // Use isDeleted to return the "🚫 This message was deleted" text
+            final bool isPending = doc.metadata.hasPendingWrites;
 
-                return ChatMessage(
-                  // ✅ text only for normal messages
-                  // text: type == 'text' ? data['text'] : '',
-                  text: isDeleted
-                      ? "🚫 This message was deleted"
-                      : (type == 'text' ||
-                                type == 'lottie' ||
-                                type == 'gift'
-                            ? data['text']
-                            : ''),
-
-                  // ✅ images ONLY for image type
-                  medias: type == 'image'
-                      ? [
-                          ChatMedia(
-                            url: data['text'], // image URL
-                            fileName: 'image_${doc.id}.jpg',
-                            type: MediaType.image,
-                            customProperties: {
-                              'isLocal':
-                                  data['isLocal'] ?? false,
-                              'isUploadFailed':
-                                  data['isUploadFailed'] ??
-                                  false,
-                            },
-                          ),
-                        ]
-                      : [],
-
-                  user: data['senderId'] == _currentUser.id
-                      ? _currentUser
-                      : _otherUser,
-
-                  createdAt: ts?.toDate() ?? DateTime.now(),
-
-                  // 🔥 emoji info lives here
-                  customProperties: {
-                    'messageId': doc.id,
-                    'senderId': data['senderId'],
-                    'type': type,
-                    'isDeleted': isDeleted,
-                    'isPending': isPending,
-                    'lottiePath': type == 'lottie'
+            return ChatMessage(
+              // ✅ text only for normal messages
+              // text: type == 'text' ? data['text'] : '',
+              text: isDeleted
+                  ? "🚫 This message was deleted"
+                  : (type == 'text' ||
+                            type == 'lottie' ||
+                            type == 'gift'
                         ? data['text']
-                        : null,
-                  },
-                );
-              }).toList()..sort(
-                (a, b) => b.createdAt.compareTo(a.createdAt),
-              );
+                        : ''),
+
+              // ✅ images ONLY for image type
+              medias: type == 'image'
+                  ? [
+                      ChatMedia(
+                        url: data['text'], // image URL
+                        fileName: 'image_${doc.id}.jpg',
+                        type: MediaType.image,
+                        customProperties: {
+                          'isLocal': data['isLocal'] ?? false,
+                          'isUploadFailed':
+                              data['isUploadFailed'] ?? false,
+                        },
+                      ),
+                    ]
+                  : [],
+
+              user: data['senderId'] == _currentUser.id
+                  ? _currentUser
+                  : _otherUser,
+
+              // createdAt: ts?.toDate() ?? DateTime.now(),
+              createdAt:
+                  ts?.toDate() ??
+                  DateTime.fromMillisecondsSinceEpoch(0),
+
+              // 🔥 emoji info lives here
+              customProperties: {
+                'messageId': doc.id,
+                'senderId': data['senderId'],
+                'type': type,
+                'isDeleted': isDeleted,
+                'isPending': isPending,
+                'lottiePath': type == 'lottie'
+                    ? data['text']
+                    : null,
+              },
+            );
+          }).toList(); //..sort(
+          //   (a, b) => b.createdAt.compareTo(a.createdAt),
+          // );
 
           // 2. RENDER THE CHAT UI
           return Stack(
@@ -561,14 +601,6 @@ class _ChatScreenState extends State<ChatScreen>
                             ),
                             onPressed: _pickImage,
                           ),
-                          // IconButton(
-                          //   icon: const Icon(
-                          //     Icons.card_giftcard_outlined,
-                          //     color: Colors.pink,
-                          //     size: 25,
-                          //   ),
-                          //   onPressed: _openGiftPicker,
-                          // ),
                         ],
                   inputDecoration: InputDecoration(
                     prefixIcon: IconButton(
@@ -681,17 +713,6 @@ class _ChatScreenState extends State<ChatScreen>
                         message.customProperties?['type'];
 
                     if (type == 'gift') {
-                      // Optional: Show a message explaining why
-                      // ScaffoldMessenger.of(
-                      //   context,
-                      // ).showSnackBar(
-                      //   const SnackBar(
-                      //     content: Text(
-                      //       "Gifts cannot be deleted.",
-                      //     ),
-                      //     duration: Duration(seconds: 1),
-                      //   ),
-                      // );
                       return; // Stop here, do not show the delete dialog
                     }
                     _showDeleteSheet(message);
@@ -801,10 +822,6 @@ class _ChatScreenState extends State<ChatScreen>
                               ? CrossAxisAlignment.end
                               : CrossAxisAlignment.start,
                           children: [
-                            // Image.asset(
-                            //   assetPath,
-                            //   fit: BoxFit.contain,
-                            // ),
                             Container(
                               height: 100,
                               width: 100,
@@ -891,18 +908,6 @@ class _ChatScreenState extends State<ChatScreen>
                           ),
                         ),
                         const SizedBox(height: 4),
-                        // Text(
-                        //   // Formats time like "12:30 PM"
-                        //   TimeOfDay.fromDateTime(
-                        //     message.createdAt,
-                        //   ).format(context),
-                        //   style: TextStyle(
-                        //     color: isMe
-                        //         ? Colors.white70
-                        //         : Colors.grey.shade600,
-                        //     fontSize: 10,
-                        //   ),
-                        // ),
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -961,44 +966,69 @@ class _ChatScreenState extends State<ChatScreen>
                             borderRadius: BorderRadius.circular(
                               12,
                             ),
-                            child: isLocal
-                                ? Image.file(
-                                    File(media.url),
-                                    width: 220,
-                                    height: 220,
-                                    fit: BoxFit.cover,
-                                  )
-                                : CachedNetworkImage(
-                                    imageUrl: media.url,
-                                    width: 220,
-                                    height: 220,
-                                    fit: BoxFit.cover,
-                                    placeholder:
-                                        (
-                                          context,
-                                          url,
-                                        ) => const SizedBox(
-                                          width: 220,
-                                          height: 220,
-                                          child: Center(
-                                            child:
-                                                CircularProgressIndicator(),
+                            child: GestureDetector(
+                              onTap: isLocal
+                                  ? null
+                                  : () {
+                                      // pushScreenWithoutNavBar(
+                                      //   context,
+
+                                      //   FullScreenImageView(
+                                      //     imageUrl: media.url,
+                                      //   ),
+                                      // );
+                                      pushScreen(
+                                        context,
+                                        withNavBar: false,
+                                        screen:
+                                            FullScreenImageView(
+                                              imageUrl:
+                                                  media.url,
+                                            ),
+                                        pageTransitionAnimation:
+                                            PageTransitionAnimation
+                                                .fade,
+                                      );
+                                    },
+                              child: isLocal
+                                  ? Image.file(
+                                      File(media.url),
+                                      width: 220,
+                                      height: 220,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : CachedNetworkImage(
+                                      imageUrl: media.url,
+                                      width: 220,
+                                      height: 220,
+                                      fit: BoxFit.cover,
+                                      placeholder:
+                                          (
+                                            context,
+                                            url,
+                                          ) => const SizedBox(
+                                            width: 220,
+                                            height: 220,
+                                            child: Center(
+                                              child:
+                                                  CircularProgressIndicator(),
+                                            ),
                                           ),
-                                        ),
-                                    errorWidget:
-                                        (
-                                          context,
-                                          url,
-                                          error,
-                                        ) => const SizedBox(
-                                          width: 220,
-                                          height: 220,
-                                          child: Icon(
-                                            Icons.broken_image,
-                                            color: Colors.grey,
+                                      errorWidget:
+                                          (
+                                            context,
+                                            url,
+                                            error,
+                                          ) => const SizedBox(
+                                            width: 220,
+                                            height: 220,
+                                            child: Icon(
+                                              Icons.broken_image,
+                                              color: Colors.grey,
+                                            ),
                                           ),
-                                        ),
-                                  ),
+                                    ),
+                            ),
                           ),
                           const SizedBox(height: 4),
                           if (isLocal)
@@ -1031,74 +1061,54 @@ class _ChatScreenState extends State<ChatScreen>
                       );
                     }
 
-                    // if (media.type == MediaType.image) {
-                    //   final bool isMe =
-                    //       message.user.id == _currentUser.id;
-
-                    //   final bool isPending =
-                    //       message
-                    //           .customProperties?['isPending'] ??
-                    //       false;
-
-                    //   return Column(
-                    //     children: [
-                    //       GestureDetector(
-                    //         onTap: () {
-                    //           pushScreenWithoutNavBar(
-                    //             context,
-                    //             FullScreenImageView(
-                    //               imageUrl: media.url,
-                    //             ),
-                    //           );
-                    //         },
-                    //         child: ClipRRect(
-                    //           borderRadius:
-                    //               BorderRadius.circular(12),
-                    //           // 🔥 Use CachedNetworkImage here
-                    //           child: CachedNetworkImage(
-                    //             imageUrl: media.url,
-                    //             width: 220,
-                    //             height: 220,
-                    //             fit: BoxFit.cover,
-                    //             placeholder: (context, url) =>
-                    //                 const SizedBox(
-                    //                   width: 220,
-                    //                   height: 220,
-                    //                   child: Center(
-                    //                     child:
-                    //                         CircularProgressIndicator(),
-                    //                   ),
-                    //                 ),
-                    //             errorWidget:
-                    //                 (context, url, error) =>
-                    //                     const SizedBox(
-                    //                       width: 220,
-                    //                       height: 220,
-                    //                       child: Icon(
-                    //                         Icons.broken_image,
-                    //                         color: Colors.grey,
-                    //                       ),
-                    //                     ),
-                    //           ),
-                    //         ),
-                    //       ),
-                    //       const SizedBox(height: 4),
-                    //       if (isMe && isPending)
-                    //         const Icon(
-                    //           Icons.access_time,
-                    //           size: 12,
-                    //           color: Colors.grey,
-                    //         ),
-                    //     ],
-                    //   );
-                    // }
                     return const SizedBox();
                   },
                 ),
               ),
+
+              // if (_isLocked)
+              //   Positioned(
+              //     left: 0,
+              //     right: 0,
+              //     bottom: 70, // Just above input bar
+              //     child: AnimatedSwitcher(
+              //       duration: const Duration(milliseconds: 300),
+              //       child: Container(
+              //         key: const ValueKey('unlock_banner'),
+              //         margin: const EdgeInsets.symmetric(
+              //           horizontal: 12,
+              //         ),
+              //         padding: const EdgeInsets.symmetric(
+              //           horizontal: 14,
+              //           vertical: 10,
+              //         ),
+              //         decoration: BoxDecoration(
+              //           color: Colors.orange.shade100,
+              //           borderRadius: BorderRadius.circular(12),
+              //           border: Border.all(color: Colors.orange),
+              //         ),
+              //         child: Row(
+              //           children: const [
+              //             Icon(
+              //               Icons.lock_outline,
+              //               size: 18,
+              //               color: Colors.orange,
+              //             ),
+              //             SizedBox(width: 8),
+              //             Expanded(
+              //               child: Text(
+              //                 "Messaging this user will cost 20 coins. Unlocks for 7 days.",
+              //                 style: TextStyle(fontSize: 13),
+              //               ),
+              //             ),
+              //           ],
+              //         ),
+              //       ),
+              //     ),
+              //   ),
               if (_showScrollButton)
                 Positioned(
-                  bottom: 80, // Move it above the input bar
+                  bottom: 90, // Move it above the input bar
                   left: 0,
                   right:
                       0, // Setting left & right to 0 calculates the center
@@ -1148,37 +1158,82 @@ class _ChatScreenState extends State<ChatScreen>
   // Wrapper to call your existing ChatService
 }
 
-class FullScreenImageView extends StatelessWidget {
+class FullScreenImageView extends StatefulWidget {
   final String imageUrl;
 
   const FullScreenImageView({super.key, required this.imageUrl});
 
   @override
+  State<FullScreenImageView> createState() =>
+      _FullScreenImageViewState();
+}
+
+class _FullScreenImageViewState
+    extends State<FullScreenImageView> {
+  double _dragOffset = 0;
+  double _opacity = 1.0;
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: Center(
-        child: InteractiveViewer(
-          minScale: 1,
-          maxScale: 4,
-          // 🔥 Use CachedNetworkImage here too
-          child: CachedNetworkImage(
-            imageUrl: imageUrl,
-            fit: BoxFit.contain,
-            placeholder: (context, url) =>
-                const CircularProgressIndicator(
+    return GestureDetector(
+      onVerticalDragUpdate: (details) {
+        setState(() {
+          _dragOffset += details.delta.dy;
+
+          // Reduce opacity while dragging
+          _opacity = (1 - (_dragOffset.abs() / 300)).clamp(
+            0.5,
+            1.0,
+          );
+        });
+      },
+      onVerticalDragEnd: (details) {
+        if (_dragOffset > 120) {
+          Navigator.pop(context); // 👈 Swipe down closes
+        } else {
+          // Reset if not enough swipe
+          setState(() {
+            _dragOffset = 0;
+            _opacity = 1.0;
+          });
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black.withOpacity(_opacity),
+        body: Stack(
+          children: [
+            Center(
+              child: Transform.translate(
+                offset: Offset(0, _dragOffset),
+                child: InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 4,
+                  child: CachedNetworkImage(
+                    imageUrl: widget.imageUrl,
+                    fit: BoxFit.contain,
+                    placeholder: (context, url) =>
+                        const CircularProgressIndicator(
+                          color: Colors.white,
+                        ),
+                    errorWidget: (context, url, error) =>
+                        const Icon(
+                          Icons.broken_image,
+                          color: Colors.white,
+                        ),
+                  ),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: IconButton(
+                icon: const Icon(
+                  Icons.close,
                   color: Colors.white,
                 ),
-            errorWidget: (context, url, error) => const Icon(
-              Icons.broken_image,
-              color: Colors.white,
+                onPressed: () => Navigator.pop(context),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
