@@ -77,8 +77,11 @@ class ChatService {
         'lastMessageType': type,
         'lastMessageId': messageRef.id,
         'lastSenderId': currentUserId,
-        'isDeleted': false,
+        // 'isDeleted': false,
         'unreadCount': {receiverId: FieldValue.increment(1)},
+        // 'unreadCount.$receiverId': FieldValue.increment(1),
+        // 'deletedFor.$receiverId': false,
+        'deletedFor': {receiverId: false},
         // 'unreadCount.$receiverId': FieldValue.increment(1),
       }, SetOptions(merge: true));
     } catch (e) {
@@ -221,13 +224,16 @@ class ChatService {
         'isUnlocked': false,
 
         // 'isUnlocked': false,
-        'isDeleted': false,
+        // 'isDeleted': false,
+        'deletedFor': {currentUserId: false, otherUserId: false},
+
         'lastMessage': 'Chat Started',
         'lastMessageType': 'system',
         'lastMessageId': null,
         'lastSenderId': currentUserId,
 
-        'isPinned': false,
+        // 'isPinned': false,
+        'pinnedBy': {currentUserId: false, otherUserId: false},
         'unreadCount': {currentUserId: 0, otherUserId: 0},
 
         'lastMessageTime': FieldValue.serverTimestamp(),
@@ -261,43 +267,38 @@ class ChatService {
     }
   }
 
-  // Future<void> markMessagesAsRead(String otherUserId) async {
-  //   final currentUserId = _auth.currentUser!.uid;
-  //   final chatRoomId = getChatRoomId(currentUserId, otherUserId);
-
-  //   try {
-  //     // We only update the specific field for the current user
-  //     await _db
-  //         .collection('conversations')
-  //         .doc(chatRoomId)
-  //         .update({'unreadCount.$currentUserId': 0});
-  //   } catch (e) {
-  //     // If the document doesn't exist yet or fails, we fail silently
-  //     // This prevents crashes if the chat is brand new
-  //     print("Error marking as read: $e");
-  //   }
-  // }
+  
   // ===========================================================================
   // 4. STREAMS: Real-time Data for UI
   // ===========================================================================
 
   /// For the Chat Screen (DashChat)
-  Stream<QuerySnapshot> getMessages(String otherUserId) {
+  
+  Stream<QuerySnapshot> getMessages(String otherUserId) async* {
     final currentUserId = _auth.currentUser!.uid;
     final chatRoomId = getChatRoomId(currentUserId, otherUserId);
 
-    return _db
+    final roomRef = _db
         .collection('conversations')
-        .doc(chatRoomId)
+        .doc(chatRoomId);
+
+    final roomDoc = await roomRef.get();
+
+    final clearedAt = roomDoc
+        .data()?['clearedAt']?[currentUserId];
+
+    Query query = roomRef
         .collection('messages')
-        .orderBy(
-          'timestamp',
-          descending: true,
-        ) // DashChat expects newest first
-        .snapshots();
+        .orderBy('timestamp', descending: true);
+
+    if (clearedAt != null) {
+      query = query.where('timestamp', isGreaterThan: clearedAt);
+    }
+
+    yield* query.snapshots();
   }
 
-  /// For the Inbox Screen
+
   Stream<QuerySnapshot> getInbox() {
     final currentUserId = _auth.currentUser!.uid;
 
@@ -308,7 +309,7 @@ class ChatService {
           arrayContains: currentUserId,
         ) // Using your Composite Index
         // .orderBy('lastMessageTime', descending: true)
-        .orderBy('isPinned', descending: true)
+        // .orderBy('isPinned', descending: true)
         .orderBy('lastMessageTime', descending: true)
         .snapshots();
   }

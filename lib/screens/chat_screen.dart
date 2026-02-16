@@ -16,9 +16,11 @@ import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 class ChatScreen extends StatefulWidget {
   final String otherUserId;
   final String otherUserName;
+  final String profileImage;
 
   const ChatScreen({
     super.key,
+    required this.profileImage,
     required this.otherUserId,
     required this.otherUserName,
   });
@@ -395,8 +397,7 @@ class _ChatScreenState extends State<ChatScreen>
     _otherUser = ChatUser(
       id: widget.otherUserId,
       // firstName: widget.otherUserName,
-      profileImage:
-          "https://media.istockphoto.com/id/1455397163/photo/portrait-of-indian-dark-pretty-girl.jpg?s=2048x2048&w=is&k=20&c=3NUASBYzvRvKn8H8J3OgILfKeAVTrY8-qihYmdjRVFA=",
+      profileImage: widget.profileImage,
       // You can add profileImage: here later
     );
 
@@ -589,6 +590,7 @@ class _ChatScreenState extends State<ChatScreen>
                   focusNode: _inputFocusNode,
                   alwaysShowSend: true,
                   sendOnEnter: true,
+                  cursorStyle: CursorStyle(hide: false),
 
                   leading: _isInputFocused
                       ? [] // 🔥 HIDE ICONS WHEN TYPING

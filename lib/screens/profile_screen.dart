@@ -20,6 +20,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -142,10 +143,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.red),
-            onPressed: _logout,
-          ),
+          // IconButton(
+          //   icon: const Icon(Icons.logout, color: Colors.red),
+          //   onPressed: _logout,
+          // ),
         ],
       ),
       body: StreamBuilder<DocumentSnapshot>(
@@ -305,7 +306,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            "$coins 💎",
+                            // "$coins 💎",
+                            "1000 💎",
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 28,
@@ -346,9 +348,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   title: "Privacy Policy",
                   onTap: () {},
                 ),
+                // _buildSettingsTile(
+                //   icon: Icons.help_outline,
+                //   title: "",
+                //   onTap: () {},
+                // ),
                 _buildSettingsTile(
                   icon: Icons.help_outline,
                   title: "Help & Support",
+                  onTap: () {},
+                ),
+                _buildSettingsTile(
+                  icon: FontAwesomeIcons.trash,
+                  title: "Delete Account",
+                  size: 20,
                   onTap: () {},
                 ),
                 const Divider(height: 40),
@@ -356,7 +369,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: Icons.logout,
                   title: "Log Out",
                   color: Colors.red,
-                  onTap: _logout,
+                  // onTap: _logout,
+                  onTap: () {},
                 ),
               ],
             ),
@@ -370,9 +384,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required IconData icon,
     required String title,
     required VoidCallback onTap,
+
     Color color = Colors.black87,
+    double size = 24,
   }) {
     return ListTile(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadiusGeometry.all(
+          Radius.elliptical(20, 15),
+        ),
+      ),
+
       onTap: onTap,
       contentPadding: EdgeInsets.zero,
       leading: Container(
@@ -381,7 +403,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(icon, color: color),
+        child: Icon(icon, color: color, size: size),
       ),
       title: Text(
         title,

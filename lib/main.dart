@@ -100,9 +100,6 @@ class _AuthGuardState extends State<AuthGuard> {
   // We use a Future to track the login process
   late Future<User?> _authFuture;
 
-  
-
-
   @override
   void initState() {
     super.initState();
@@ -110,6 +107,8 @@ class _AuthGuardState extends State<AuthGuard> {
   }
 
   Future<void> _createUserIfNotExists(User user) async {
+    final FirebaseAuth _auth = FirebaseAuth.instance;
+    final uid = _auth.currentUser!.uid;
     final userDoc = FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid);
@@ -120,7 +119,7 @@ class _AuthGuardState extends State<AuthGuard> {
       await userDoc.set({
         'uid': user.uid,
         'isAnonymous': user.isAnonymous,
-        'name': '',
+        'name': 'User${uid.substring(0, 9)}',
         'photoUrl': '',
         'role': 'user',
         'createdAt': FieldValue.serverTimestamp(),
@@ -154,7 +153,6 @@ class _AuthGuardState extends State<AuthGuard> {
 
     return user;
   }
-
 
   @override
   Widget build(BuildContext context) {
