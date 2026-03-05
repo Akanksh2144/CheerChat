@@ -119,7 +119,7 @@ class _AuthGuardState extends State<AuthGuard> {
       await userDoc.set({
         'uid': user.uid,
         'isAnonymous': user.isAnonymous,
-        'name': 'User${uid.substring(0, 9)}',
+        'name': 'User${user.uid.substring(0, 9)}',
         'photoUrl': '',
         'role': 'user',
         'createdAt': FieldValue.serverTimestamp(),
@@ -177,7 +177,9 @@ class _AuthGuardState extends State<AuthGuard> {
         }
 
         // 3. Success! Go to Main App
-        return const PersistentBottomNavBar();
+        // return  PersistentBottomNavBar(uid: );
+        final user = snapshot.data!;
+        return PersistentBottomNavBar(uid: user.uid);
       },
     );
   }

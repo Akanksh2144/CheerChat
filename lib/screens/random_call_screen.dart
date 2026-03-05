@@ -1,6 +1,6 @@
-import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:judotalk/screens_notcompleted/ongoing_call_screen.dart';
+import 'package:judotalk/ui_test_runner.dart';
 
 class RandomCallScreen extends StatefulWidget {
   const RandomCallScreen({super.key});
@@ -48,11 +48,28 @@ class _RandomCallScreenState extends State<RandomCallScreen>
           _buildBackground(),
 
           // LAYER 2: The Main UI Content
-          SafeArea(
-            child: isSearching
-                ? _buildSearchingUI()
-                : _buildActiveCallUI(),
-          ),
+          // SafeArea(
+          //   child: isSearching
+          //       ? _buildSearchingUI()
+          //       // : _buildActiveCallUI(),
+          //       : OngoingCallScreen(
+          //           agoraService:
+          //               FakeAgoraService(), // 👉 Injecting the Fake
+          //           channelId: 'test_room',
+          //           token: 'dummy_token',
+          //           localUid: 1,
+          //         ),
+          // ),
+          isSearching
+              ? _buildSearchingUI()
+              // : _buildActiveCallUI(),
+              : OngoingCallScreen(
+                  agoraService:
+                      FakeAgoraService(), // 👉 Injecting the Fake
+                  channelId: 'test_room',
+                  token: 'dummy_token',
+                  localUid: 1,
+                ),
 
           // DEBUG BUTTON: To switch modes for testing
           Positioned(

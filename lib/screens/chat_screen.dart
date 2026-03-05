@@ -451,8 +451,15 @@ class _ChatScreenState extends State<ChatScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // backgroundColor: Colors.white,
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        shadowColor: Colors.white12,
+        centerTitle: true,
+        surfaceTintColor: Colors.pink[200],
+        // foregroundColor: Colors.black,
+        //animateColor: true,
         title: Text(widget.otherUserName),
         actions: [
           Container(
@@ -578,493 +585,504 @@ class _ChatScreenState extends State<ChatScreen>
           // 2. RENDER THE CHAT UI
           return Stack(
             children: [
-              DashChat(
-                currentUser: _currentUser,
-                onSend: (ChatMessage message) {
-                  _sendMessage(message);
-                },
-
-                messages: messages,
-
-                inputOptions: InputOptions(
-                  focusNode: _inputFocusNode,
-                  alwaysShowSend: true,
-                  sendOnEnter: true,
-                  cursorStyle: CursorStyle(hide: false),
-
-                  leading: _isInputFocused
-                      ? [] // 🔥 HIDE ICONS WHEN TYPING
-                      : [
-                          IconButton(
-                            icon: const Icon(
-                              Icons.image,
-                              color: Colors.blue,
-                              size: 25,
-                            ),
-                            onPressed: _pickImage,
-                          ),
-                        ],
-                  inputDecoration: InputDecoration(
-                    prefixIcon: IconButton(
-                      onPressed: _openLottiePicker,
-                      icon: Icon(Icons.emoji_emotions),
-                      color: Colors.yellow.shade800,
-                    ),
-                    suffixIcon: _isInputFocused
-                        ? SizedBox()
-                        : IconButton(
-                            icon: const Icon(
-                              Icons.card_giftcard_outlined,
-                              color: Colors.pink,
-                              size: 25,
-                            ),
-                            onPressed: _openGiftPicker,
-                          ),
-                    hintText: "Type a message…",
-                    hintStyle: TextStyle(
-                      color: Colors.grey.shade600,
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey.shade100,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(30),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-
-                  sendButtonBuilder: (onSend) {
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: CircleAvatar(
-                        radius: 22,
-                        backgroundColor: Colors.blueAccent,
-                        child: IconButton(
-                          icon: const Icon(
-                            Icons.send,
-                            color: Colors.white,
-                          ),
-                          onPressed: onSend,
-                        ),
-                      ),
-                    );
+              Container(
+                color: Colors.white,
+                child: DashChat(
+                  currentUser: _currentUser,
+                  onSend: (ChatMessage message) {
+                    _sendMessage(message);
                   },
-                ),
-                scrollToBottomOptions: ScrollToBottomOptions(
-                  disabled: true,
-                  // ✅ Use 'builder' instead of 'widget'
-                  scrollToBottomBuilder: (scrollController) {
-                    return GestureDetector(
-                      onTap: () {
-                        // Scroll back to bottom (0.0 is the bottom in chat lists)
-                        scrollController.animateTo(
-                          0.0,
-                          curve: Curves.easeOut,
-                          duration: const Duration(
-                            milliseconds: 300,
-                          ),
-                        );
-                      },
-                      child: Container(
-                        margin: const EdgeInsets.only(
-                          bottom: 10,
-                        ),
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.blueAccent,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(
-                                0.2,
+
+                  messages: messages,
+
+                  inputOptions: InputOptions(
+                    focusNode: _inputFocusNode,
+                    alwaysShowSend: true,
+                    sendOnEnter: true,
+                    cursorStyle: CursorStyle(hide: false),
+
+                    leading: _isInputFocused
+                        ? [] // 🔥 HIDE ICONS WHEN TYPING
+                        : [
+                            IconButton(
+                              icon: const Icon(
+                                Icons.image,
+                                color: Colors.blue,
+                                size: 25,
                               ),
-                              blurRadius: 5,
-                              offset: const Offset(0, 3),
+                              onPressed: _pickImage,
                             ),
                           ],
-                        ),
-                        child: const Icon(
-                          Icons.keyboard_arrow_down,
-                          color: Colors.white,
-                        ),
+                    inputDecoration: InputDecoration(
+                      prefixIcon: IconButton(
+                        onPressed: _openLottiePicker,
+                        icon: Icon(Icons.emoji_emotions),
+                        color: Colors.yellow.shade800,
                       ),
-                    );
-                  },
-                ),
-                messageListOptions: MessageListOptions(
-                  scrollController: _scrollController,
-                ),
-                messageOptions: MessageOptions(
-                  containerColor: Colors.grey.shade200,
-                  textColor: Colors.black,
-                  currentUserContainerColor: Colors.blueAccent,
-                  currentUserTextColor: Colors.white,
+                      suffixIcon: _isInputFocused
+                          ? SizedBox()
+                          : IconButton(
+                              icon: const Icon(
+                                Icons.card_giftcard_outlined,
+                                color: Colors.pink,
+                                size: 25,
+                              ),
+                              onPressed: _openGiftPicker,
+                            ),
+                      hintText: "Type a message…",
+                      hintStyle: TextStyle(
+                        color: Colors.grey.shade600,
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey.shade100,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
 
-                  borderRadius: 18,
-                  showCurrentUserAvatar: false,
-                  showOtherUsersAvatar: true,
-                  showTime: true,
-                  timeTextColor: Colors.grey,
-                  timeFontSize: 11,
-
-                  onLongPressMessage: (ChatMessage message) {
-                    final type =
-                        message.customProperties?['type'];
-
-                    if (type == 'gift') {
-                      return; // Stop here, do not show the delete dialog
-                    }
-                    _showDeleteSheet(message);
-                  },
-
-                  messagePadding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-
-                  messageDecorationBuilder:
-                      (message, previousMessage, nextMessage) {
-                        final type =
-                            message.customProperties?['type'];
-                        final isMe =
-                            message.user.id == _currentUser.id;
-                        if (type == 'lottie' || type == 'gift') {
-                          return const BoxDecoration(
-                            color: Colors.transparent,
-                          );
-                        }
-
-                        return BoxDecoration(
-                          color: isMe
-                              ? Colors.blueAccent
-                              : Colors.grey.shade200,
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(18),
-                            topRight: const Radius.circular(18),
-                            bottomLeft: isMe
-                                ? const Radius.circular(18)
-                                : Radius.zero,
-                            bottomRight: isMe
-                                ? Radius.zero
-                                : const Radius.circular(18),
+                    sendButtonBuilder: (onSend) {
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: CircleAvatar(
+                          radius: 22,
+                          backgroundColor: Colors.blueAccent,
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.send,
+                              color: Colors.white,
+                            ),
+                            onPressed: onSend,
                           ),
-                        );
-                      },
+                        ),
+                      );
+                    },
+                  ),
+                  scrollToBottomOptions: ScrollToBottomOptions(
+                    disabled: true,
+                    // ✅ Use 'builder' instead of 'widget'
+                    scrollToBottomBuilder: (scrollController) {
+                      return GestureDetector(
+                        onTap: () {
+                          // Scroll back to bottom (0.0 is the bottom in chat lists)
+                          scrollController.animateTo(
+                            0.0,
+                            curve: Curves.easeOut,
+                            duration: const Duration(
+                              milliseconds: 300,
+                            ),
+                          );
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(
+                            bottom: 10,
+                          ),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.blueAccent,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(
+                                  0.2,
+                                ),
+                                blurRadius: 5,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.keyboard_arrow_down,
+                            color: Colors.white,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  messageListOptions: MessageListOptions(
+                    scrollController: _scrollController,
+                  ),
+                  messageOptions: MessageOptions(
+                    containerColor: Colors.grey.shade200,
+                    textColor: Colors.black,
+                    currentUserContainerColor: Colors.blueAccent,
+                    currentUserTextColor: Colors.white,
 
-                  messageTextBuilder: (message, previousMessage, nextMessage) {
-                    // 1. DEFINE isMe HERE so the rest of the code knows what it is
-                    final bool isMe =
-                        message.user.id == _currentUser.id;
-                    final bool isDeleted =
-                        message.customProperties?['isDeleted'] ??
-                        false;
-                    final type =
-                        message.customProperties?['type'];
-                    final bool isPending =
-                        message.customProperties?['isPending'] ??
-                        false;
+                    borderRadius: 18,
+                    showCurrentUserAvatar: false,
+                    showOtherUsersAvatar: true,
+                    showTime: true,
+                    timeTextColor: Colors.grey,
+                    timeFontSize: 11,
 
-                    if (type == 'lottie') {
-                      final lottiePath = message.text;
+                    onLongPressMessage: (ChatMessage message) {
+                      final type =
+                          message.customProperties?['type'];
+
+                      if (type == 'gift') {
+                        return; // Stop here, do not show the delete dialog
+                      }
+                      _showDeleteSheet(message);
+                    },
+
+                    messagePadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+
+                    messageDecorationBuilder:
+                        (message, previousMessage, nextMessage) {
+                          final type =
+                              message.customProperties?['type'];
+                          final isMe =
+                              message.user.id == _currentUser.id;
+                          if (type == 'lottie' ||
+                              type == 'gift') {
+                            return const BoxDecoration(
+                              color: Colors.transparent,
+                            );
+                          }
+
+                          return BoxDecoration(
+                            color: isMe
+                                ? Colors.blueAccent
+                                : Colors.grey.shade200,
+                            borderRadius: BorderRadius.only(
+                              topLeft: const Radius.circular(18),
+                              topRight: const Radius.circular(
+                                18,
+                              ),
+                              bottomLeft: isMe
+                                  ? const Radius.circular(18)
+                                  : Radius.zero,
+                              bottomRight: isMe
+                                  ? Radius.zero
+                                  : const Radius.circular(18),
+                            ),
+                          );
+                        },
+
+                    messageTextBuilder: (message, previousMessage, nextMessage) {
+                      // 1. DEFINE isMe HERE so the rest of the code knows what it is
+                      final bool isMe =
+                          message.user.id == _currentUser.id;
+                      final bool isDeleted =
+                          message
+                              .customProperties?['isDeleted'] ??
+                          false;
+                      final type =
+                          message.customProperties?['type'];
                       final bool isPending =
                           message
                               .customProperties?['isPending'] ??
                           false;
 
-                      return Padding(
-                        padding: const EdgeInsets.all(4.0),
-                        child: Column(
-                          crossAxisAlignment: isMe
-                              ? CrossAxisAlignment.end
-                              : CrossAxisAlignment.start,
-                          children: [
-                            Lottie.asset(
-                              lottiePath,
-                              width:
-                                  100, // Size for smiley stickers
-                              height: 100,
-                              repeat: true,
-                              // Optional: Add a placeholder while the file loads from assets
-                              frameRate: FrameRate.max,
-                            ),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  TimeOfDay.fromDateTime(
-                                    message.createdAt,
-                                  ).format(context),
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey,
+                      if (type == 'lottie') {
+                        final lottiePath = message.text;
+                        final bool isPending =
+                            message
+                                .customProperties?['isPending'] ??
+                            false;
+
+                        return Padding(
+                          padding: const EdgeInsets.all(4.0),
+                          child: Column(
+                            crossAxisAlignment: isMe
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
+                            children: [
+                              Lottie.asset(
+                                lottiePath,
+                                width:
+                                    100, // Size for smiley stickers
+                                height: 100,
+                                repeat: true,
+                                // Optional: Add a placeholder while the file loads from assets
+                                frameRate: FrameRate.max,
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    TimeOfDay.fromDateTime(
+                                      message.createdAt,
+                                    ).format(context),
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  if (isMe && isPending)
+                                    const Icon(
+                                      Icons.access_time,
+                                      size: 12,
+                                      color: Colors.grey,
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      if (type == 'gift') {
+                        final assetPath = message.text;
+                        return Padding(
+                          padding: const EdgeInsets.all(4.0),
+                          child: Column(
+                            crossAxisAlignment: isMe
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                height: 100,
+                                width: 100,
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors
+                                      .white, // White background makes PNGs pop
+                                  borderRadius:
+                                      BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.pink.shade100,
+                                    width: 2,
                                   ),
                                 ),
-                                const SizedBox(width: 5),
-                                if (isMe && isPending)
-                                  const Icon(
+                                child: Image.asset(
+                                  assetPath,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                "Sent a Gift",
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey.shade600,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                              if (isMe && isPending)
+                                const Padding(
+                                  padding: EdgeInsets.only(
+                                    top: 4,
+                                  ),
+                                  child: Icon(
                                     Icons.access_time,
                                     size: 12,
                                     color: Colors.grey,
                                   ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-                    if (type == 'gift') {
-                      final assetPath = message.text;
-                      return Padding(
-                        padding: const EdgeInsets.all(4.0),
-                        child: Column(
-                          crossAxisAlignment: isMe
-                              ? CrossAxisAlignment.end
-                              : CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              height: 100,
-                              width: 100,
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors
-                                    .white, // White background makes PNGs pop
-                                borderRadius:
-                                    BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: Colors.pink.shade100,
-                                  width: 2,
                                 ),
-                              ),
-                              child: Image.asset(
-                                assetPath,
-                                fit: BoxFit.contain,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              "Sent a Gift",
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey.shade600,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                            if (isMe && isPending)
-                              const Padding(
-                                padding: EdgeInsets.only(top: 4),
-                                child: Icon(
-                                  Icons.access_time,
-                                  size: 12,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                          ],
-                        ),
-                      );
-                    }
+                            ],
+                          ),
+                        );
+                      }
 
-                    if (isDeleted) {
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.block,
-                            size: 14,
-                            color: isMe
-                                ? Colors.white70
-                                : Colors.grey,
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            "This message was deleted",
-                            style: TextStyle(
-                              fontStyle: FontStyle.italic,
-                              color: isMe
-                                  ? Colors.white70
-                                  : Colors.grey.shade600,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      );
-                    }
-
-                    // =========================
-                    // A. NORMAL TEXT MESSAGE (With Time Inside)
-                    // =========================
-                    return Column(
-                      crossAxisAlignment: isMe
-                          ? CrossAxisAlignment.end
-                          : CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          message.text,
-                          style: TextStyle(
-                            color: isMe
-                                ? Colors.white
-                                : Colors.black,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
+                      if (isDeleted) {
+                        return Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              TimeOfDay.fromDateTime(
-                                message.createdAt,
-                              ).format(context),
-                              style: TextStyle(
-                                color: isMe
-                                    ? Colors.white70
-                                    : Colors.grey.shade600,
-                                fontSize: 10,
-                              ),
+                            Icon(
+                              Icons.block,
+                              size: 14,
+                              color: isMe
+                                  ? Colors.white70
+                                  : Colors.grey,
                             ),
                             const SizedBox(width: 5),
-                            if (isMe && isPending)
-                              Icon(
-                                Icons.access_time,
-                                size: 12,
+                            Text(
+                              "This message was deleted",
+                              style: TextStyle(
+                                fontStyle: FontStyle.italic,
                                 color: isMe
                                     ? Colors.white70
                                     : Colors.grey.shade600,
+                                fontSize: 14,
                               ),
+                            ),
                           ],
-                        ),
-                      ],
-                    );
-                  },
+                        );
+                      }
 
-                  messageMediaBuilder: (message, previous, next) {
-                    if (message.medias == null ||
-                        message.medias!.isEmpty)
-                      return const SizedBox();
-
-                    final media = message.medias!.first;
-
-                    if (media.type == MediaType.image) {
-                      final bool isMe =
-                          message.user.id == _currentUser.id;
-
-                      final bool isLocal =
-                          media.customProperties?['isLocal'] ??
-                          false;
-
-                      final bool isUploadFailed =
-                          media
-                              .customProperties?['isUploadFailed'] ??
-                          false;
-
+                      // =========================
+                      // A. NORMAL TEXT MESSAGE (With Time Inside)
+                      // =========================
                       return Column(
                         crossAxisAlignment: isMe
                             ? CrossAxisAlignment.end
                             : CrossAxisAlignment.start,
                         children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(
-                              12,
-                            ),
-                            child: GestureDetector(
-                              onTap: isLocal
-                                  ? null
-                                  : () {
-                                      // pushScreenWithoutNavBar(
-                                      //   context,
-
-                                      //   FullScreenImageView(
-                                      //     imageUrl: media.url,
-                                      //   ),
-                                      // );
-                                      pushScreen(
-                                        context,
-                                        withNavBar: false,
-                                        screen:
-                                            FullScreenImageView(
-                                              imageUrl:
-                                                  media.url,
-                                            ),
-                                        pageTransitionAnimation:
-                                            PageTransitionAnimation
-                                                .fade,
-                                      );
-                                    },
-                              child: isLocal
-                                  ? Image.file(
-                                      File(media.url),
-                                      width: 220,
-                                      height: 220,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : CachedNetworkImage(
-                                      imageUrl: media.url,
-                                      width: 220,
-                                      height: 220,
-                                      fit: BoxFit.cover,
-                                      placeholder:
-                                          (
-                                            context,
-                                            url,
-                                          ) => const SizedBox(
-                                            width: 220,
-                                            height: 220,
-                                            child: Center(
-                                              child:
-                                                  CircularProgressIndicator(),
-                                            ),
-                                          ),
-                                      errorWidget:
-                                          (
-                                            context,
-                                            url,
-                                            error,
-                                          ) => const SizedBox(
-                                            width: 220,
-                                            height: 220,
-                                            child: Icon(
-                                              Icons.broken_image,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                    ),
+                          Text(
+                            message.text,
+                            style: TextStyle(
+                              color: isMe
+                                  ? Colors.white
+                                  : Colors.black,
+                              fontSize: 16,
                             ),
                           ),
                           const SizedBox(height: 4),
-                          if (isLocal)
-                            const Text(
-                              "Uploading...",
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey,
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                TimeOfDay.fromDateTime(
+                                  message.createdAt,
+                                ).format(context),
+                                style: TextStyle(
+                                  color: isMe
+                                      ? Colors.white70
+                                      : Colors.grey.shade600,
+                                  fontSize: 10,
+                                ),
                               ),
-                            ),
-                          if (isUploadFailed)
-                            const Text(
-                              "Upload failed",
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.red,
-                              ),
-                            ),
-                          if (!isLocal && !isUploadFailed)
-                            Text(
-                              TimeOfDay.fromDateTime(
-                                message.createdAt,
-                              ).format(context),
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey,
-                              ),
-                            ),
+                              const SizedBox(width: 5),
+                              if (isMe && isPending)
+                                Icon(
+                                  Icons.access_time,
+                                  size: 12,
+                                  color: isMe
+                                      ? Colors.white70
+                                      : Colors.grey.shade600,
+                                ),
+                            ],
+                          ),
                         ],
                       );
-                    }
+                    },
 
-                    return const SizedBox();
-                  },
+                    messageMediaBuilder: (message, previous, next) {
+                      if (message.medias == null ||
+                          message.medias!.isEmpty)
+                        return const SizedBox();
+
+                      final media = message.medias!.first;
+
+                      if (media.type == MediaType.image) {
+                        final bool isMe =
+                            message.user.id == _currentUser.id;
+
+                        final bool isLocal =
+                            media.customProperties?['isLocal'] ??
+                            false;
+
+                        final bool isUploadFailed =
+                            media
+                                .customProperties?['isUploadFailed'] ??
+                            false;
+
+                        return Column(
+                          crossAxisAlignment: isMe
+                              ? CrossAxisAlignment.end
+                              : CrossAxisAlignment.start,
+                          children: [
+                            ClipRRect(
+                              borderRadius:
+                                  BorderRadius.circular(12),
+                              child: GestureDetector(
+                                onTap: isLocal
+                                    ? null
+                                    : () {
+                                        // pushScreenWithoutNavBar(
+                                        //   context,
+
+                                        //   FullScreenImageView(
+                                        //     imageUrl: media.url,
+                                        //   ),
+                                        // );
+                                        pushScreen(
+                                          context,
+                                          withNavBar: false,
+                                          screen:
+                                              FullScreenImageView(
+                                                imageUrl:
+                                                    media.url,
+                                              ),
+                                          pageTransitionAnimation:
+                                              PageTransitionAnimation
+                                                  .fade,
+                                        );
+                                      },
+                                child: isLocal
+                                    ? Image.file(
+                                        File(media.url),
+                                        width: 220,
+                                        height: 220,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : CachedNetworkImage(
+                                        imageUrl: media.url,
+                                        width: 220,
+                                        height: 220,
+                                        fit: BoxFit.cover,
+                                        placeholder:
+                                            (
+                                              context,
+                                              url,
+                                            ) => const SizedBox(
+                                              width: 220,
+                                              height: 220,
+                                              child: Center(
+                                                child:
+                                                    CircularProgressIndicator(),
+                                              ),
+                                            ),
+                                        errorWidget:
+                                            (
+                                              context,
+                                              url,
+                                              error,
+                                            ) => const SizedBox(
+                                              width: 220,
+                                              height: 220,
+                                              child: Icon(
+                                                Icons
+                                                    .broken_image,
+                                                color:
+                                                    Colors.grey,
+                                              ),
+                                            ),
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            if (isLocal)
+                              const Text(
+                                "Uploading...",
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            if (isUploadFailed)
+                              const Text(
+                                "Upload failed",
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.red,
+                                ),
+                              ),
+                            if (!isLocal && !isUploadFailed)
+                              Text(
+                                TimeOfDay.fromDateTime(
+                                  message.createdAt,
+                                ).format(context),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                          ],
+                        );
+                      }
+
+                      return const SizedBox();
+                    },
+                  ),
                 ),
               ),
 
