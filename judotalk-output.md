@@ -8181,8 +8181,8 @@ class LoginPage extends StatelessWidget {
 <file path="lib/screens_notcompleted/profile_details_screen.dart">
 import 'package:flag/flag.dart';
 import 'package:flutter/material.dart';
-import 'package:judotalk/data/country_data.dart';
-import 'package:judotalk/data/hosts_data.dart';
+import 'package:cheerchat/data/country_data.dart';
+import 'package:cheerchat/data/hosts_data.dart';
 
 class ProfileDetailsScreen extends StatelessWidget {
   final HostData host;
@@ -8342,9 +8342,9 @@ class ProfileDetailsScreen extends StatelessWidget {
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:judotalk/data/country_data.dart';
-import 'package:judotalk/data/language_data.dart';
-import 'package:judotalk/widgets/search_filters.dart';
+import 'package:cheerchat/data/country_data.dart';
+import 'package:cheerchat/data/language_data.dart';
+import 'package:cheerchat/widgets/search_filters.dart';
 
 enum FilterType { country, id, language }
 
@@ -8668,9 +8668,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:judotalk/data/country_data.dart';
-import 'package:judotalk/data/hosts_data.dart';
-import 'package:judotalk/screens_notcompleted/profile_details_screen.dart';
+import 'package:cheerchat/data/country_data.dart';
+import 'package:cheerchat/data/hosts_data.dart';
+import 'package:cheerchat/screens_notcompleted/profile_details_screen.dart';
 import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 
 Widget _ageChip(int age) => Container(
@@ -11092,7 +11092,7 @@ samples, guidance on mobile development, and a full API reference.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:judotalk/main.dart';
+import 'package:cheerchat/main.dart';
 
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
@@ -12593,7 +12593,7 @@ const Map<Country, String> countryNames = {
 <file path="lib/home_page.dart">
 // import 'package:agora_chat_sdk/agora_chat_sdk.dart';
 // import 'package:flutter/material.dart';
-// import 'package:judotalk/main.dart';
+// import 'package:cheerchat/main.dart';
 
 // class MyHomePage extends StatefulWidget {
 //   const MyHomePage({super.key, required this.title});
@@ -13973,9 +13973,9 @@ endforeach(ffi_plugin)
 import "package:flutter/material.dart";
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:judotalk/data/hosts_data.dart';
-import 'package:judotalk/screens/filters_screen.dart';
-import 'package:judotalk/widgets/cards/host_card.dart';
+import 'package:cheerchat/data/hosts_data.dart';
+import 'package:cheerchat/screens/filters_screen.dart';
+import 'package:cheerchat/widgets/cards/host_card.dart';
 import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 
 class HostsGridViewScreen extends StatefulWidget {
@@ -15974,7 +15974,7 @@ flutter:
 
 <file path="lib/data/hosts_data.dart">
 import 'package:flutter/material.dart';
-import 'package:judotalk/data/country_data.dart';
+import 'package:cheerchat/data/country_data.dart';
 
 enum HostStatus { online, offline, busy }
 
@@ -16337,7 +16337,7 @@ const List<HostData> hostData = [
 // import 'package:firebase_auth/firebase_auth.dart';
 // import 'package:firebase_core/firebase_core.dart';
 // import 'package:flutter/material.dart';
-// import 'package:judotalk/widgets/nav_bar.dart';
+// import 'package:cheerchat/widgets/nav_bar.dart';
 // import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // // Global key to access the scaffold messenger
@@ -16393,7 +16393,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:judotalk/widgets/nav_bar.dart';
+import 'package:cheerchat/widgets/nav_bar.dart';
 
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -16530,9 +16530,9 @@ import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:judotalk/constants/gift_constants.dart';
-import 'package:judotalk/constants/lottie_constants.dart';
-import 'package:judotalk/services/chat_services.dart';
+import 'package:cheerchat/constants/gift_constants.dart';
+import 'package:cheerchat/constants/lottie_constants.dart';
+import 'package:cheerchat/services/chat_services.dart';
 import 'package:lottie/lottie.dart';
 import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 
@@ -17769,12 +17769,12 @@ class _FullScreenImageViewState
 <file path="lib/widgets/nav_bar.dart">
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:judotalk/screens/chat_screen.dart';
-import 'package:judotalk/screens/hosts_grid_view.dart';
-import 'package:judotalk/screens/inbox_screen.dart';
-import 'package:judotalk/screens/profile_screen.dart';
-import 'package:judotalk/screens_notcompleted/call_history.dart';
-import 'package:judotalk/screens/random_call_screen.dart';
+import 'package:cheerchat/screens/chat_screen.dart';
+import 'package:cheerchat/screens/hosts_grid_view.dart';
+import 'package:cheerchat/screens/inbox_screen.dart';
+import 'package:cheerchat/screens/profile_screen.dart';
+import 'package:cheerchat/screens_notcompleted/call_history.dart';
+import 'package:cheerchat/screens/random_call_screen.dart';
 import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
 
 class PersistentBottomNavBar extends StatefulWidget {
@@ -17874,8 +17874,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:judotalk/screens/chat_screen.dart'; // Import your chat screen
-import 'package:judotalk/services/chat_services.dart';
+import 'package:cheerchat/screens/chat_screen.dart'; // Import your chat screen
+import 'package:cheerchat/services/chat_services.dart';
 import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart'; // Import your service
 
 class InboxScreen extends StatefulWidget {

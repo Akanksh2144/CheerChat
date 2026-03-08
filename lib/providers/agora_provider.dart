@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:judotalk/services/agora_services.dart';
+import 'package:cheerchat/services/agora_service.dart';
 
 final agoraServiceProvider = Provider<AgoraService>((ref) {
   final service = AgoraService();

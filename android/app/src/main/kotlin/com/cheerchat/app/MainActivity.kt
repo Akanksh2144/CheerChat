@@ -1,4 +1,4 @@
-package com.example.judotalk
+package com.cheerchat.app
 
 import io.flutter.embedding.android.FlutterActivity
 

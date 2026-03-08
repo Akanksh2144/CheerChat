@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:judotalk/screens_notcompleted/ongoing_call_screen.dart';
+import 'package:cheerchat/screens_notcompleted/ongoing_call_screen.dart';
 import 'package:mocktail/mocktail.dart';
-// import 'package:judotalk/screens_notcompleted/ongoing_call_screen.dart'; // Update with your actual path
-import 'package:judotalk/services/agora_services.dart'; // Update with your actual path
+// import 'package:cheerchat/screens_notcompleted/ongoing_call_screen.dart'; // Update with your actual path
+import 'package:cheerchat/services/agora_service.dart'; // Update with your actual path
 
 // 1. Create the Mock Service
 class MockAgoraService extends Mock implements AgoraService {}

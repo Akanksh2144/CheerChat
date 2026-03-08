@@ -7,12 +7,17 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:739076896699:android:ec7cc02b532a47aa2cf69e",
+        "mobilesdk_app_id": "1:739076896699:android:b54172d14cdfc2ad2cf69e",
         "android_client_info": {
-          "package_name": "com.example.judotalk"
+          "package_name": "com.cheerchat.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "739076896699-2b4aoj2atam2u051uhfms2tmht9nhnna.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAlqJ1SmlAv7paIp7zNGdeGf42fM2oWM6A"
@@ -20,7 +25,41 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "739076896699-2b4aoj2atam2u051uhfms2tmht9nhnna.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:739076896699:android:ec7cc02b532a47aa2cf69e",
+        "android_client_info": {
+          "package_name": "com.example.judotalk"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "739076896699-2b4aoj2atam2u051uhfms2tmht9nhnna.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAlqJ1SmlAv7paIp7zNGdeGf42fM2oWM6A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "739076896699-2b4aoj2atam2u051uhfms2tmht9nhnna.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
