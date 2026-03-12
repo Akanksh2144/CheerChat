@@ -1,424 +1,22 @@
-// import 'package:cached_network_image/cached_network_image.dart';
-// import 'package:cloud_firestore/cloud_firestore.dart';
-// import 'package:firebase_auth/firebase_auth.dart';
-// import 'package:flutter/material.dart';
-// import 'package:intl/intl.dart';
-// import 'package:cheerchat/screens/chat_screen.dart'; // Import your chat screen
-// import 'package:cheerchat/services/chat_services.dart';
-// import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart'; // Import your service
 
-// class InboxScreen extends StatefulWidget {
-//   const InboxScreen({super.key});
+// lib/screens/inbox_screen.dart
+//
+// Inbox — quick-access bubbles + chat list.
+// Story-ring bubbles: Notifications · Visitors · Call History · Promos
+// Theme-aware: calls AppColors.of(context) per method — no static palette.
 
-//   @override
-//   State<InboxScreen> createState() => _InboxScreenState();
-// }
-
-// class _InboxScreenState extends State<InboxScreen> {
-//   final ChatService _chatService = ChatService();
-//   final FirebaseAuth _auth = FirebaseAuth.instance;
-
-//   @override
-//   Widget build(BuildContext context) {
-//     print(_auth.currentUser!.uid);
-//     return Scaffold(
-//       appBar: AppBar(
-//         title: const Text(
-//           "Messages",
-//           style: TextStyle(fontWeight: FontWeight.bold),
-//         ),
-//         backgroundColor: Colors.white,
-//         elevation: 0.5,
-//         foregroundColor: Colors.black,
-//       ),
-//       backgroundColor: Colors.white,
-//       // 1. USE YOUR EXISTING SERVICE STREAM
-//       body: StreamBuilder<QuerySnapshot>(
-//         stream: _chatService.getInbox(),
-//         builder: (context, snapshot) {
-//           if (snapshot.hasError) {
-//             return Center(
-//               child: Text("Error: ${snapshot.error}"),
-//             );
-//           }
-
-//           if (snapshot.connectionState ==
-//               ConnectionState.waiting) {
-//             return const Center(
-//               child: CircularProgressIndicator(),
-//             );
-//           }
-
-//           // final docs = snapshot.data!.docs;
-//           final currentUid = _auth.currentUser!.uid;
-
-//           // final docs = snapshot.data!.docs.where((doc) {
-//           //   final data = doc.data() as Map<String, dynamic>;
-//           //   final deletedFor = Map<String, dynamic>.from(
-//           //     data['deletedFor'] ?? {},
-//           //   );
-//           //   return deletedFor[currentUid] != true;
-//           // }).toList();
-//           // 1. Get raw docs
-//           var allDocs = snapshot.data!.docs;
-
-//           // 2. Filter (Your existing block, just slightly rewritten)
-//           var filteredDocs = allDocs.where((doc) {
-//             final data = doc.data() as Map<String, dynamic>;
-//             final deletedFor = Map<String, dynamic>.from(
-//               data['deletedFor'] ?? {},
-//             );
-//             return deletedFor[currentUid] != true;
-//           }).toList();
-
-//           // 3. Sort (New Logic for Private Pins)
-//           filteredDocs.sort((a, b) {
-//             final dataA = a.data() as Map<String, dynamic>;
-//             final dataB = b.data() as Map<String, dynamic>;
-
-//             // Check if pinned for THIS user specifically
-//             final pinnedA =
-//                 (dataA['pinnedBy'] as Map?)?[currentUid] == true;
-//             final pinnedB =
-//                 (dataB['pinnedBy'] as Map?)?[currentUid] == true;
-
-//             if (pinnedA && !pinnedB)
-//               return -1; // A is pinned, goes first
-//             if (!pinnedA && pinnedB)
-//               return 1; // B is pinned, goes first
-
-//             // If both are same status, keep the original time sort (from the query)
-//             return 0;
-//           });
-
-//           // 4. Assign back to 'docs' for the ListView
-//           final docs = filteredDocs;
-
-//           if (docs.isEmpty) {
-//             return _buildEmptyState();
-//           }
-
-//           return ListView.separated(
-//             itemCount: docs.length,
-//             separatorBuilder: (context, index) =>
-//                 const Divider(indent: 84, height: 1),
-//             itemBuilder: (context, index) {
-//               final data =
-//                   docs[index].data() as Map<String, dynamic>;
-
-//               final currentUid = _auth.currentUser!.uid;
-
-//               // Get participants list
-//               final List<dynamic> participantIds =
-//                   data['participantIds'] ?? [];
-
-//               // Find the other user ID
-//               String? otherUserId;
-//               for (var id in participantIds) {
-//                 if (id != currentUid) {
-//                   otherUserId = id;
-//                   break;
-//                 }
-//               }
-//               print('hi');
-//               print(otherUserId);
-
-//               if (otherUserId == null) {
-//                 return const SizedBox();
-//               }
-
-//               final Map<String, dynamic> unreadMap =
-//                   Map<String, dynamic>.from(
-//                     data['unreadCount'] ?? {},
-//                   );
-
-//               final int unread = unreadMap[currentUid] ?? 0;
-//               // final bool isPinned = data['pinnedBy'] ?? false;
-//               // Check if the 'pinnedBy' map has MY user ID set to true
-//               final pinnedMap = Map<String, dynamic>.from(
-//                 data['pinnedBy'] ?? {},
-//               );
-//               final bool isPinned =
-//                   pinnedMap[currentUid] == true;
-
-//               return StreamBuilder<DocumentSnapshot>(
-//                 stream: FirebaseFirestore.instance
-//                     .collection('users')
-//                     .doc(otherUserId)
-//                     .snapshots(),
-//                 builder: (context, userSnapshot) {
-//                   if (!userSnapshot.hasData) {
-//                     return const SizedBox();
-//                   }
-
-//                   final userData =
-//                       userSnapshot.data!.data()
-//                           as Map<String, dynamic>?;
-
-//                   final String name =
-//                       userData?['name'] ??
-//                       ''; //?? "User${otherUserId?.substring(0, 5)}";
-
-//                   final String image =
-//                       userData?['profileImage'] ?? "";
-
-//                   return InkWell(
-//                     onLongPress: () {
-//                       _showChatOptions(
-//                         context,
-//                         docs[index].id,
-//                         data['isPinned'] ?? false,
-//                       );
-//                     },
-//                     onTap: () {
-//                       pushScreenWithoutNavBar(
-//                         context,
-//                         ChatScreen(
-//                           otherUserId: otherUserId!,
-//                           otherUserName: name,
-//                           profileImage: image,
-//                         ),
-//                       );
-//                     },
-//                     child: Container(
-//                       // color: isPinned
-//                       //     ? Colors.orange.withOpacity(0.05)
-//                       //     : Colors.transparent,
-//                       child: Padding(
-//                         padding: const EdgeInsets.symmetric(
-//                           horizontal: 16,
-//                           vertical: 12,
-//                         ),
-//                         child: Row(
-//                           children: [
-//                             CircleAvatar(
-//                               radius: 28,
-//                               backgroundColor: Colors.grey[200],
-//                               backgroundImage: image.isNotEmpty
-//                                   ? CachedNetworkImageProvider(
-//                                       image,
-//                                     )
-//                                   : null,
-//                               child: image.isEmpty
-//                                   ? const Icon(
-//                                       Icons.person,
-//                                       color: Colors.grey,
-//                                     )
-//                                   : null,
-//                             ),
-//                             const SizedBox(width: 16),
-//                             Expanded(
-//                               child: Column(
-//                                 crossAxisAlignment:
-//                                     CrossAxisAlignment.start,
-//                                 children: [
-//                                   Text(
-//                                     name,
-//                                     style: const TextStyle(
-//                                       fontSize: 16,
-//                                       fontWeight:
-//                                           FontWeight.bold,
-//                                     ),
-//                                   ),
-
-//                                   const SizedBox(height: 4),
-//                                   Text(
-//                                     data['lastMessage'] ?? "",
-//                                     maxLines: 1,
-//                                     overflow:
-//                                         TextOverflow.ellipsis,
-//                                     style: TextStyle(
-//                                       fontSize: 14,
-//                                       color: Colors.grey[600],
-//                                       fontWeight:
-//                                           // data['lastSenderId'] !=
-//                                           //     currentUid
-//                                           unread > 0
-//                                           ? FontWeight.w900
-//                                           : FontWeight.normal,
-//                                     ),
-//                                   ),
-//                                 ],
-//                               ),
-//                             ),
-//                             Column(
-//                               crossAxisAlignment:
-//                                   CrossAxisAlignment.end,
-//                               children: [
-//                                 if (isPinned)
-//                                   Padding(
-//                                     padding:
-//                                         const EdgeInsets.only(
-//                                           bottom: 4,
-//                                         ),
-//                                     child: Icon(
-//                                       Icons.push_pin,
-//                                       size: 18,
-//                                       color:
-//                                           const Color.fromARGB(
-//                                             255,
-//                                             123,
-//                                             83,
-//                                             22,
-//                                           ),
-//                                     ),
-//                                   ),
-//                                 Text(
-//                                   _formatTimestamp(
-//                                     data['lastMessageTime'],
-//                                   ),
-//                                   style: TextStyle(
-//                                     fontSize: 12,
-//                                     color: Colors.grey[500],
-//                                   ),
-//                                 ),
-//                                 if (unread > 0)
-//                                   Container(
-//                                     margin:
-//                                         const EdgeInsets.only(
-//                                           top: 4,
-//                                         ),
-//                                     padding:
-//                                         const EdgeInsets.all(6),
-//                                     decoration:
-//                                         const BoxDecoration(
-//                                           color: Colors.red,
-//                                           shape: BoxShape.circle,
-//                                         ),
-//                                     child: Text(
-//                                       unread.toString(),
-//                                       style: const TextStyle(
-//                                         color: Colors.white,
-//                                         fontSize: 12,
-//                                       ),
-//                                     ),
-//                                   ),
-//                               ],
-//                             ),
-//                           ],
-//                         ),
-//                       ),
-//                     ),
-//                   );
-//                 },
-//               );
-//             },
-//           );
-//         },
-//       ),
-//     );
-//   }
-
-//   Widget _buildEmptyState() {
-//     return Center(
-//       child: Column(
-//         mainAxisAlignment: MainAxisAlignment.center,
-//         children: [
-//           Icon(
-//             Icons.mark_chat_unread_outlined,
-//             size: 80,
-//             color: Colors.grey[300],
-//           ),
-//           const SizedBox(height: 16),
-//           Text(
-//             "No messages yet",
-//             style: TextStyle(
-//               color: Colors.grey[500],
-//               fontSize: 18,
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-
-//   String _formatTimestamp(Timestamp? timestamp) {
-//     if (timestamp == null) return "";
-//     final date = timestamp.toDate();
-//     final now = DateTime.now();
-
-//     if (date.year == now.year &&
-//         date.month == now.month &&
-//         date.day == now.day) {
-//       return DateFormat('hh:mm a').format(date);
-//     } else if (now.difference(date).inDays < 7) {
-//       return DateFormat('EEE').format(date); // Mon, Tue...
-//     } else {
-//       return DateFormat('dd/MM').format(date);
-//     }
-//   }
-
-//   void _showChatOptions(
-//     BuildContext context,
-//     String chatId,
-//     bool isPinned,
-//   ) {
-//     final currentUid = FirebaseAuth.instance.currentUser!.uid;
-//     showDialog(
-//       context: context,
-//       builder: (context) {
-//         return AlertDialog(
-//           title: const Text("Chat Options"),
-//           content: Column(
-//             mainAxisSize: MainAxisSize.min,
-//             children: [
-//               ListTile(
-//                 leading: const Icon(Icons.push_pin),
-//                 title: Text(
-//                   isPinned ? "Unpin Chat" : "Pin Chat",
-//                 ),
-
-//                 onTap: () async {
-//                   await FirebaseFirestore.instance
-//                       .collection('conversations')
-//                       .doc(chatId)
-//                       .update({
-//                         // Update ONLY my pin status
-//                         'pinnedBy.$currentUid': !isPinned,
-//                       });
-//                   Navigator.pop(context);
-//                 },
-//               ),
-//               ListTile(
-//                 leading: const Icon(
-//                   Icons.delete,
-//                   color: Colors.red,
-//                 ),
-//                 title: const Text("Delete Chat"),
-
-//                 onTap: () async {
-//                   final currentUid =
-//                       FirebaseAuth.instance.currentUser!.uid;
-
-//                   await FirebaseFirestore.instance
-//                       .collection('conversations')
-//                       .doc(chatId)
-//                       .update({
-//                         'deletedFor.$currentUid': true,
-//                         'clearedAt.$currentUid':
-//                             FieldValue.serverTimestamp(),
-//                         'pinnedBy.$currentUid': false,
-//                         'unreadCount.$currentUid': 0,
-//                       });
-
-//                   Navigator.pop(context);
-//                 },
-//               ),
-//             ],
-//           ),
-//         );
-//       },
-//     );
-//   }
-// }
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cheerchat/screens/chat_screen.dart';
+import 'package:cheerchat/services/chat_services.dart';
+import 'package:cheerchat/theme/app_colors.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:cheerchat/screens/chat_screen.dart';
-import 'package:cheerchat/services/chat_services.dart';
-import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -431,247 +29,549 @@ class _InboxScreenState extends State<InboxScreen> {
   final ChatService _chatService = ChatService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  // ── Quick-access items ────────────────────────────────────────────────────
+  // Ring colors are always vivid — they work on both light and dark bg.
+  // Badge counts stubbed — replace with real unread counts from API.
+
+  static const List<_QuickItem> _quickItems = [
+    _QuickItem(
+      icon: Icons.notifications_outlined,
+      label: 'Notifications',
+      ringColors: [Color(0xFFE91E8C), Color(0xFFFF6B9D)],
+      badge: 3, // TODO: GET /api/notifications/unread
+    ),
+    _QuickItem(
+      icon: Icons.visibility_outlined,
+      label: 'Visitors',
+      ringColors: [Color(0xFF7C4DFF), Color(0xFFB388FF)],
+      badge: 12, // TODO: GET /api/profile/visitors/unread
+    ),
+    _QuickItem(
+      icon: Icons.call_outlined,
+      label: 'Call History',
+      ringColors: [Color(0xFF00BCD4), Color(0xFF26C6DA)],
+      badge: 0,
+    ),
+    _QuickItem(
+      icon: Icons.local_offer_outlined,
+      label: 'Promos',
+      ringColors: [Color(0xFFFFCA28), Color(0xFFFF9800)],
+      badge: 1, // TODO: GET /api/promos/unread
+    ),
+  ];
+
+  // ── Root ──────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          "Messages",
-          style: TextStyle(fontWeight: FontWeight.bold),
+    final c = AppColors.of(context);
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: isDark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
+      child: Scaffold(
+        backgroundColor: c.bg,
+        body: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildAppBar(),
+              _buildQuickAccessRow(),
+              _buildSectionHeader('Messages'),
+              Expanded(child: _buildChatList()),
+            ],
+          ),
         ),
-        backgroundColor: Colors.white,
-        elevation: 0.5,
-        foregroundColor: Colors.black,
-      ),
-      backgroundColor: Colors.white,
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _chatService.getInbox(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(
-              child: Text("Error: ${snapshot.error}"),
-            );
-          }
-
-          if (snapshot.connectionState ==
-              ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
-
-          final currentUid = _auth.currentUser!.uid;
-
-          // Filter soft-deleted conversations
-          var filteredDocs = snapshot.data!.docs.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final deletedFor = Map<String, dynamic>.from(
-              data['deletedFor'] ?? {},
-            );
-            return deletedFor[currentUid] != true;
-          }).toList();
-
-          // Sort: pinned first, then by time (already ordered by query)
-          filteredDocs.sort((a, b) {
-            final dataA = a.data() as Map<String, dynamic>;
-            final dataB = b.data() as Map<String, dynamic>;
-            final pinnedA =
-                (dataA['pinnedBy'] as Map?)?[currentUid] == true;
-            final pinnedB =
-                (dataB['pinnedBy'] as Map?)?[currentUid] == true;
-            if (pinnedA && !pinnedB) return -1;
-            if (!pinnedA && pinnedB) return 1;
-            return 0;
-          });
-
-          if (filteredDocs.isEmpty) return _buildEmptyState();
-
-          return ListView.separated(
-            itemCount: filteredDocs.length,
-            separatorBuilder: (context, index) =>
-                const Divider(indent: 84, height: 1),
-            itemBuilder: (context, index) {
-              final data =
-                  filteredDocs[index].data()
-                      as Map<String, dynamic>;
-
-              // Find the other participant ID
-              final List<dynamic> participantIds =
-                  data['participantIds'] ?? [];
-              final String? otherUserId = participantIds
-                  .cast<String>()
-                  .where((id) => id != currentUid)
-                  .firstOrNull;
-
-              if (otherUserId == null) return const SizedBox();
-
-              final int unread =
-                  (Map<String, dynamic>.from(
-                    data['unreadCount'] ?? {},
-                  ))[currentUid] ??
-                  0;
-
-              // Fix #10: use pinnedBy map correctly (was passing data['isPinned'])
-              final bool isPinned =
-                  (Map<String, dynamic>.from(
-                    data['pinnedBy'] ?? {},
-                  ))[currentUid] ==
-                  true;
-
-              // Fix #9: use participants snapshot already stored in the doc
-              // instead of opening a new Firestore stream per tile.
-              final participantsMap = Map<String, dynamic>.from(
-                data['participants'] ?? {},
-              );
-              final otherParticipant = Map<String, dynamic>.from(
-                participantsMap[otherUserId] ?? {},
-              );
-
-              final String name =
-                  otherParticipant['name'] as String? ?? '';
-              final String image =
-                  otherParticipant['profileImage'] as String? ??
-                  '';
-
-              return InkWell(
-                onLongPress: () => _showChatOptions(
-                  context,
-                  filteredDocs[index].id,
-                  isPinned, // Fix #10: pass correctly computed isPinned
-                ),
-                onTap: () => pushScreenWithoutNavBar(
-                  context,
-                  ChatScreen(
-                    otherUserId: otherUserId,
-                    otherUserName: name,
-                    profileImage: image,
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 28,
-                        backgroundColor: Colors.grey[200],
-                        backgroundImage: image.isNotEmpty
-                            ? CachedNetworkImageProvider(image)
-                            : null,
-                        child: image.isEmpty
-                            ? const Icon(
-                                Icons.person,
-                                color: Colors.grey,
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              name,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              data['lastMessage'] ?? "",
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[600],
-                                fontWeight: unread > 0
-                                    ? FontWeight.w900
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.end,
-                        children: [
-                          if (isPinned)
-                            const Padding(
-                              padding: EdgeInsets.only(
-                                bottom: 4,
-                              ),
-                              child: Icon(
-                                Icons.push_pin,
-                                size: 18,
-                                color: Color.fromARGB(
-                                  255,
-                                  123,
-                                  83,
-                                  22,
-                                ),
-                              ),
-                            ),
-                          Text(
-                            _formatTimestamp(
-                              data['lastMessageTime'],
-                            ),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                          if (unread > 0)
-                            Container(
-                              margin: const EdgeInsets.only(
-                                top: 4,
-                              ),
-                              padding: const EdgeInsets.all(6),
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Text(
-                                unread.toString(),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
       ),
     );
   }
 
+  // ── App bar ───────────────────────────────────────────────────────────────
+
+  Widget _buildAppBar() {
+    final c = AppColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      child: Text(
+        'Inbox',
+        style: GoogleFonts.poppins(
+          color: c.textPrimary,
+          fontSize: 24,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  // ── Quick-access bubbles ──────────────────────────────────────────────────
+
+  Widget _buildQuickAccessRow() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: _quickItems
+            .map((item) => _buildBubble(item))
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _buildBubble(_QuickItem item) {
+    final c = AppColors.of(context);
+    const double outerSize = 62;
+    const double innerSize = 52;
+    const double iconSize = 22;
+
+    return GestureDetector(
+      onTap: () {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${item.label} coming soon!'),
+            duration: const Duration(seconds: 1),
+            backgroundColor: c.pink,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      },
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Gradient ring
+          Container(
+            width: outerSize,
+            height: outerSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: item.badge > 0
+                    ? item.ringColors
+                    : [c.border, c.border],
+              ),
+            ),
+            child: Center(
+              // Inner circle — creates the ring gap illusion
+              child: Container(
+                width: innerSize,
+                height: innerSize,
+                decoration: BoxDecoration(
+                  color: c.bubbleInner,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: ShaderMask(
+                    shaderCallback: (bounds) => LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: item.badge > 0
+                          ? item.ringColors
+                          : [c.textSecondary, c.textSecondary],
+                    ).createShader(bounds),
+                    child: Icon(
+                      item.icon,
+                      size: iconSize,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Badge
+          if (item.badge > 0)
+            Positioned(
+              top: -1,
+              right: -1,
+              child: Container(
+                constraints: const BoxConstraints(
+                  minWidth: 18,
+                  minHeight: 18,
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 4,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: item.ringColors,
+                  ),
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: c.bg, width: 1.5),
+                ),
+                child: Center(
+                  child: Text(
+                    item.badge > 99 ? '99+' : '${item.badge}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      height: 1.6,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── Section header ────────────────────────────────────────────────────────
+
+  Widget _buildSectionHeader(String title) {
+    final c = AppColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
+      child: Text(
+        title.toUpperCase(),
+        style: GoogleFonts.poppins(
+          color: c.textSecondary,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+  }
+
+  // ── Chat list ─────────────────────────────────────────────────────────────
+
+  Widget _buildChatList() {
+    final c = AppColors.of(context);
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: _chatService.getInbox(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'Something went wrong',
+              style: TextStyle(color: c.textSecondary),
+            ),
+          );
+        }
+
+        if (snapshot.connectionState ==
+            ConnectionState.waiting) {
+          return Center(
+            child: CircularProgressIndicator(color: c.pink),
+          );
+        }
+
+        final currentUid = _auth.currentUser!.uid;
+
+        var docs = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final deletedFor = Map<String, dynamic>.from(
+            data['deletedFor'] ?? {},
+          );
+          return deletedFor[currentUid] != true;
+        }).toList();
+
+        docs.sort((a, b) {
+          final dA = a.data() as Map<String, dynamic>;
+          final dB = b.data() as Map<String, dynamic>;
+          final pA =
+              (dA['pinnedBy'] as Map?)?[currentUid] == true;
+          final pB =
+              (dB['pinnedBy'] as Map?)?[currentUid] == true;
+          if (pA && !pB) return -1;
+          if (!pA && pB) return 1;
+          return 0;
+        });
+
+        if (docs.isEmpty) return _buildEmptyState();
+
+        return ListView.separated(
+          physics: const BouncingScrollPhysics(),
+          itemCount: docs.length,
+          separatorBuilder: (_, __) =>
+              Divider(height: 1, color: c.divider, indent: 80),
+          itemBuilder: (ctx, i) =>
+              _buildChatTile(docs[i], currentUid),
+        );
+      },
+    );
+  }
+
+  // ── Chat tile ─────────────────────────────────────────────────────────────
+
+  Widget _buildChatTile(
+    DocumentSnapshot doc,
+    String currentUid,
+  ) {
+    final c = AppColors.of(context);
+    final data = doc.data() as Map<String, dynamic>;
+
+    final List<dynamic> participantIds =
+        data['participantIds'] ?? [];
+    final String? otherUserId = participantIds
+        .cast<String>()
+        .where((id) => id != currentUid)
+        .firstOrNull;
+
+    if (otherUserId == null) return const SizedBox.shrink();
+
+    final int unread =
+        (Map<String, dynamic>.from(
+          data['unreadCount'] ?? {},
+        ))[currentUid] ??
+        0;
+    final bool isPinned =
+        (Map<String, dynamic>.from(
+          data['pinnedBy'] ?? {},
+        ))[currentUid] ==
+        true;
+
+    final participantsMap = Map<String, dynamic>.from(
+      data['participants'] ?? {},
+    );
+    final otherParticipant = Map<String, dynamic>.from(
+      participantsMap[otherUserId] ?? {},
+    );
+
+    final String name =
+        otherParticipant['name'] as String? ?? 'Unknown';
+    final String image =
+        otherParticipant['profileImage'] as String? ?? '';
+    final String lastMsg = data['lastMessage'] as String? ?? '';
+    final String lastMsgType =
+        data['lastMessageType'] as String? ?? 'text';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onLongPress: () =>
+            _showChatOptions(doc.id, isPinned, currentUid),
+        onTap: () =>
+            Navigator.of(context, rootNavigator: true).push(
+              MaterialPageRoute(
+                builder: (_) => ChatScreen(
+                  otherUserId: otherUserId,
+                  otherUserName: name,
+                  profileImage: image,
+                ),
+              ),
+            ),
+        splashColor: c.pink.withOpacity(0.06),
+        highlightColor: c.surface.withOpacity(0.5),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 11,
+          ),
+          child: Row(
+            children: [
+              // Avatar
+              Stack(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: unread > 0
+                            ? c.pink
+                            : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                    child: ClipOval(
+                      child: image.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: image,
+                              fit: BoxFit.cover,
+                              placeholder: (_, __) =>
+                                  Container(color: c.surface),
+                              errorWidget: (_, __, ___) =>
+                                  _avatarFallback(),
+                            )
+                          : _avatarFallback(),
+                    ),
+                  ),
+                  if (isPinned)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFB300),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: c.bg,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.push_pin,
+                          size: 9,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(width: 12),
+
+              // Name + preview
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: GoogleFonts.poppins(
+                        color: c.textPrimary,
+                        fontSize: 14,
+                        fontWeight: unread > 0
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        if (lastMsgType == 'image') ...[
+                          Icon(
+                            Icons.photo_outlined,
+                            size: 12,
+                            color: c.textSecondary,
+                          ),
+                          const SizedBox(width: 3),
+                        ] else if (lastMsgType == 'gift') ...[
+                          const Text(
+                            '🎁 ',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                        ],
+                        Expanded(
+                          child: Text(
+                            lastMsgType == 'image'
+                                ? 'Photo'
+                                : lastMsg,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: unread > 0
+                                  ? c.textPrimary.withOpacity(
+                                      0.8,
+                                    )
+                                  : c.textSecondary,
+                              fontSize: 12,
+                              fontWeight: unread > 0
+                                  ? FontWeight.w500
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // Timestamp + unread badge
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _formatTimestamp(
+                      data['lastMessageTime'] as Timestamp?,
+                    ),
+                    style: TextStyle(
+                      color: unread > 0
+                          ? c.pink
+                          : c.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  if (unread > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: c.pink,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        unread > 99 ? '99+' : '$unread',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    )
+                  else
+                    const SizedBox(height: 18),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _avatarFallback() {
+    final c = AppColors.of(context);
+    return Container(
+      color: c.avatarFallback,
+      child: Icon(Icons.person, color: c.avatarIcon, size: 26),
+    );
+  }
+
+  // ── Empty state ───────────────────────────────────────────────────────────
+
   Widget _buildEmptyState() {
+    final c = AppColors.of(context);
     return Center(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.mark_chat_unread_outlined,
-            size: 80,
-            color: Colors.grey[300],
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: c.surface,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.chat_bubble_outline,
+              size: 36,
+              color: c.textSecondary,
+            ),
           ),
           const SizedBox(height: 16),
           Text(
-            "No messages yet",
+            'No messages yet',
+            style: GoogleFonts.poppins(
+              color: c.textPrimary,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Start a conversation by tapping a host',
             style: TextStyle(
-              color: Colors.grey[500],
-              fontSize: 18,
+              color: c.textSecondary,
+              fontSize: 13,
             ),
           ),
         ],
@@ -679,11 +579,108 @@ class _InboxScreenState extends State<InboxScreen> {
     );
   }
 
-  String _formatTimestamp(Timestamp? timestamp) {
-    if (timestamp == null) return "";
-    final date = timestamp.toDate();
-    final now = DateTime.now();
+  // ── Chat options ──────────────────────────────────────────────────────────
 
+  void _showChatOptions(
+    String chatId,
+    bool isPinned,
+    String currentUid,
+  ) {
+    final c = AppColors.of(context);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: c.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(20),
+        ),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: c.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _optionTile(
+              icon: isPinned
+                  ? Icons.push_pin_outlined
+                  : Icons.push_pin,
+              label: isPinned ? 'Unpin Chat' : 'Pin Chat',
+              color: c.textPrimary,
+              onTap: () async {
+                Navigator.pop(ctx);
+                await FirebaseFirestore.instance
+                    .collection('conversations')
+                    .doc(chatId)
+                    .update({'pinnedBy.$currentUid': !isPinned});
+              },
+            ),
+            _optionTile(
+              icon: Icons.delete_outline,
+              label: 'Delete Chat',
+              color: Colors.redAccent,
+              onTap: () async {
+                Navigator.pop(ctx);
+                await FirebaseFirestore.instance
+                    .collection('conversations')
+                    .doc(chatId)
+                    .update({
+                      'deletedFor.$currentUid': true,
+                      'clearedAt.$currentUid':
+                          FieldValue.serverTimestamp(),
+                      'pinnedBy.$currentUid': false,
+                      'unreadCount.$currentUid': 0,
+                    });
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _optionTile({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color color = Colors.white,
+  }) {
+    return ListTile(
+      onTap: onTap,
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: color, size: 18),
+      ),
+      title: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w500,
+          fontSize: 14,
+        ),
+      ),
+    );
+  }
+
+  // ── Timestamp formatter ───────────────────────────────────────────────────
+
+  String _formatTimestamp(Timestamp? ts) {
+    if (ts == null) return '';
+    final date = ts.toDate();
+    final now = DateTime.now();
     if (date.year == now.year &&
         date.month == now.month &&
         date.day == now.day) {
@@ -694,61 +691,20 @@ class _InboxScreenState extends State<InboxScreen> {
       return DateFormat('dd/MM').format(date);
     }
   }
+}
 
-  void _showChatOptions(
-    BuildContext context,
-    String chatId,
-    bool isPinned,
-  ) {
-    final currentUid = FirebaseAuth.instance.currentUser!.uid;
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text("Chat Options"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.push_pin),
-                // Fix #10: label now correctly reflects current pin state
-                title: Text(
-                  isPinned ? "Unpin Chat" : "Pin Chat",
-                ),
-                onTap: () async {
-                  await FirebaseFirestore.instance
-                      .collection('conversations')
-                      .doc(chatId)
-                      .update({
-                        'pinnedBy.$currentUid': !isPinned,
-                      });
-                  if (context.mounted) Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.delete,
-                  color: Colors.red,
-                ),
-                title: const Text("Delete Chat"),
-                onTap: () async {
-                  await FirebaseFirestore.instance
-                      .collection('conversations')
-                      .doc(chatId)
-                      .update({
-                        'deletedFor.$currentUid': true,
-                        'clearedAt.$currentUid':
-                            FieldValue.serverTimestamp(),
-                        'pinnedBy.$currentUid': false,
-                        'unreadCount.$currentUid': 0,
-                      });
-                  if (context.mounted) Navigator.pop(context);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
+// ── Quick-access item data class ──────────────────────────────────────────────
+
+class _QuickItem {
+  final IconData icon;
+  final String label;
+  final List<Color> ringColors;
+  final int badge;
+
+  const _QuickItem({
+    required this.icon,
+    required this.label,
+    required this.ringColors,
+    this.badge = 0,
+  });
 }

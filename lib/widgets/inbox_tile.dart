@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+import 'package:cheerchat/theme/app_colors.dart';
 
 class InboxTile extends StatelessWidget {
   final String userName;
@@ -7,7 +10,7 @@ class InboxTile extends StatelessWidget {
   final String userId;
   final String time;
   final int unreadCount;
-  final bool isHost; // To distinguish paid hosts
+  final bool isHost;
   final VoidCallback onTap;
 
   const InboxTile({
@@ -24,8 +27,13 @@ class InboxTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    final hasUnread = unreadCount > 0;
+
     return InkWell(
       onTap: onTap,
+      splashColor: c.pink.withOpacity(0.06),
+      highlightColor: c.pink.withOpacity(0.04),
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: 16.0,
@@ -33,92 +41,109 @@ class InboxTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // 1. Avatar
-            CircleAvatar(
-              radius: 28,
-              backgroundColor: Colors.grey[200],
-              backgroundImage: NetworkImage(userImage),
+            // ── Avatar ──────────────────────────────────────────────────
+            Stack(
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: c.avatarFallback,
+                  backgroundImage: NetworkImage(userImage),
+                ),
+                if (isHost)
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: c.pink,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: c.bg,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 14),
 
-            // 2. Name & Message Snippet (Expanded to take available space)
+            // ── Name + Last message ──────────────────────────────────────
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        userName,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      // if (isHost) ...[
-                      //   const SizedBox(width: 4),
-                      //   const Icon(
-                      //     Icons
-                      //         .verified, // Or specific Host Icon
-                      //     size: 16,
-                      //     color: Colors.blue,
-                      //   ),
-                      // ],
-                    ],
+                  Text(
+                    userName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: hasUnread
+                          ? FontWeight.w700
+                          : FontWeight.w600,
+                      color: c.textPrimary,
+                    ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   Text(
                     lastMessage,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: unreadCount > 0
-                          ? Colors.black87
-                          : Colors.grey[600],
-                      fontWeight: unreadCount > 0
-                          ? FontWeight.w600
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: hasUnread
+                          ? c.textPrimary
+                          : c.textSecondary,
+                      fontWeight: hasUnread
+                          ? FontWeight.w500
                           : FontWeight.normal,
                     ),
                   ),
                 ],
               ),
             ),
+            const SizedBox(width: 10),
 
-            // 3. Time & Unread Badge
+            // ── Time + Unread badge ──────────────────────────────────────
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
                   time,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: unreadCount > 0
-                        ? Colors.blue
-                        : Colors.grey[500],
-                    fontWeight: unreadCount > 0
-                        ? FontWeight.bold
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: hasUnread ? c.pink : c.textSecondary,
+                    fontWeight: hasUnread
+                        ? FontWeight.w600
                         : FontWeight.normal,
                   ),
                 ),
-                if (unreadCount > 0) ...[
-                  const SizedBox(height: 6),
+                if (hasUnread) ...[
+                  const SizedBox(height: 5),
                   Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: const BoxDecoration(
-                      color:
-                          Colors.blue, // Your primary app color
-                      shape: BoxShape.circle,
+                    constraints: const BoxConstraints(
+                      minWidth: 20,
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: c.pink,
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      unreadCount > 9
-                          ? '9+'
+                      unreadCount > 99
+                          ? '99+'
                           : unreadCount.toString(),
+                      textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 10,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),

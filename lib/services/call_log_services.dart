@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 class CallLogService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -35,7 +36,7 @@ class CallLogService {
         'participantIds': [callerId, receiverId],
         'participants': participantsMap,
       });
-      print("📞 Call log created successfully!");
+      debugPrint("📞 Call log created successfully!");
     }
   }
 
@@ -56,9 +57,9 @@ class CallLogService {
         'durationInSeconds': durationInSeconds,
         'totalCoinsSpent': totalCoinsSpent,
       });
-      print("📞 Call log completed & saved!");
+      debugPrint("📞 Call log completed & saved!");
     } catch (e) {
-      print("Failed to end call log: $e");
+      debugPrint("Failed to end call log: $e");
     }
   }
 }

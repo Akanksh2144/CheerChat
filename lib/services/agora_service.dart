@@ -142,7 +142,7 @@ class AgoraService {
               '⚠️ Connection lost. Initiating 10-second buffer...',
             );
 
-            // 👉 5-Second Buffer Before Cutting Billing
+            // 👉 10-Second Buffer Before Cutting Billing
             if (_isBillingActive) {
               _billingDisconnectTimer?.cancel();
               _billingDisconnectTimer = Timer(
@@ -286,7 +286,7 @@ class AgoraService {
       controller: VideoViewController.remote(
         rtcEngine: _engine,
         canvas: VideoCanvas(uid: uid),
-        connection: RtcConnection(channelId: _currentChannelId),
+        connection: RtcConnection(channelId: _currentChannelId!),
       ),
     );
   }

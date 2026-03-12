@@ -1,252 +1,259 @@
-// import 'package:flutter/material.dart';
-// import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-// // import 'package:cheerchat/screens/chat_screen.dart';
-// import 'package:cheerchat/screens/hosts_grid_view.dart';
-// import 'package:cheerchat/screens/inbox_screen.dart';
-// import 'package:cheerchat/screens/profile_screen.dart';
-// import 'package:cheerchat/screens/random_call_screen.dart';
-// // import 'package:cheerchat/screens_notcompleted/signUpDetailsForm.dart';
-// // import 'package:cheerchat/screens_notcompleted/userOnboardingPage.dart';
-// // import 'package:cheerchat/screens_notcompleted/userSignupPage.dart';
-// // import 'package:cheerchat/services/agora_services.dart';
-// import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
-// // import 'package:firebase_auth/firebase_auth.dart';
 
-// class PersistentBottomNavBar extends StatefulWidget {
-//   const PersistentBottomNavBar({super.key, required this.uid});
-//   final String uid;
-//   @override
-//   State<StatefulWidget> createState() {
-//     return _PersistentBottomNavBarState();
-//   }
-// }
+// lib/widgets/nav_bar.dart
+//
+// Custom bottom nav — IndexedStack keeps all tabs alive (no re-init on switch).
+// Back-button behaviour:
+//   • Any non-home tab  → jump to tab 0
+//   • Home tab (1st)    → "Press back again to exit" snackbar
+//   • Home tab (2nd, <2s) → exit
 
-// class _PersistentBottomNavBarState
-//     extends State<PersistentBottomNavBar> {
-//   final PersistentTabController _controller =
-//       PersistentTabController(initialIndex: 0);
+import 'dart:async';
 
-//   @override
-//   Widget build(BuildContext context) {
-//     return PersistentTabView(
-//       gestureNavigationEnabled: false,
-//       controller: _controller,
-//       tabs: [
-//         PersistentTabConfig(
-//           screen: HostsGridViewScreen(),
-//           item: ItemConfig(
-//             icon: FaIcon(FontAwesomeIcons.earthAmericas),
-//             title: "Connect",
-//           ),
-//         ),
-//         // PersistentTabConfig(
-//         //   screen: SignupDetailsForm(firebaseUid: widget.uid,),
-//         //   // screen: InboxScreen(),
-//         //   item: ItemConfig(
-//         //     icon: FaIcon(FontAwesomeIcons.page4),
-//         //     title: "Random Call",
-//         //   ),
-//         // ),
-//         PersistentTabConfig(
-//           screen: RandomCallScreen(),
-//           // screen: InboxScreen(),
-//           item: ItemConfig(
-//             icon: FaIcon(FontAwesomeIcons.shuffle),
-//             title: "Random Call",
-//           ),
-//         ),
-// PersistentTabConfig(
-//   screen: ChatScreen(
-//     otherUserId:
-//         // "PPoSN7U9A0NcCXWx46rJUDI5ecw2", //otherUserId!,
-//         'H6pGRnUV8PYkcDW9sP49Rssze572',
-//     otherUserName: 'Pixel XL Pro',
-//     profileImage: '',
-//   ),
-//   item: ItemConfig(
-//     icon: FaIcon(FontAwesomeIcons.message),
-//     title: "Random Call",
-//   ),
-// ),
-//         PersistentTabConfig(
-//           screen: InboxScreen(),
-//           item: ItemConfig(
-//             icon: FaIcon(FontAwesomeIcons.solidMessage),
-//             title: "Chat",
-//           ),
-//         ),
-//         PersistentTabConfig(
-//           screen: ProfileScreen(),
-//           item: ItemConfig(
-//             icon: FaIcon(FontAwesomeIcons.user),
-//             title: "Profile",
-//           ),
-//         ),
-//       ],
+import 'package:cheerchat/screens/chat_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_chat_ui/flutter_chat_ui.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-//       navBarBuilder: (navBarConfig) => NeumorphicBottomNavBar(
-//         navBarConfig: navBarConfig,
-//         height: 60,
-//         navBarDecoration: NavBarDecoration(
-//           color: const Color.fromARGB(206, 255, 255, 255),
-//           borderRadius: BorderRadius.circular(8),
-//           // boxShadow: [
-//           //   BoxShadow(color: Colors.black26, blurRadius: 10),
-//           // ],
-//         ),
-//       ),
-//     );
-//   }
-// }
 import 'package:cheerchat/screens/hosts_grid_view.dart';
 import 'package:cheerchat/screens/inbox_screen.dart';
-import 'package:cheerchat/screens/profile_screen.dart';
 import 'package:cheerchat/screens/random_call_screen.dart';
-import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
+import 'package:cheerchat/screens/profile_screen.dart';
+import 'package:cheerchat/theme/app_colors.dart';
 
-class PersistentBottomNavBar extends StatefulWidget {
-  const PersistentBottomNavBar({super.key, required this.uid});
-
+class AppShell extends StatefulWidget {
+  const AppShell({super.key, required this.uid});
   final String uid;
 
   @override
-  State<PersistentBottomNavBar> createState() =>
-      _PersistentBottomNavBarState();
+  State<AppShell> createState() => _AppShellState();
 }
 
-class _PersistentBottomNavBarState
-    extends State<PersistentBottomNavBar> {
-  late final PersistentTabController _controller;
+class _AppShellState extends State<AppShell> {
+  int _index = 0;
+  bool _exitArmed = false;
+  Timer? _exitTimer;
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = PersistentTabController(initialIndex: 0);
+  static const _screens = [
+    HostsGridViewScreen(),
+    RandomCallScreen(),
+    InboxScreen(),
+    ProfileScreen(),
+    ChatScreen(otherUserId: 'haaJCmi8plTE8Wxd1nIpU9uhuuf2',otherUserName: 'Pixel XL Pro',profileImage: '',),
+  ];
+
+  void _onTap(int i) {
+    if (_index == i) return;
+    HapticFeedback.selectionClick();
+    setState(() => _index = i);
+    // Reset exit arm when leaving home tab
+    if (i != 0) {
+      _exitTimer?.cancel();
+      _exitArmed = false;
+    }
   }
 
-  List<PersistentTabConfig> _buildTabs(BuildContext context) {
-    return [
-      PersistentTabConfig(
-        screen: const HostsGridViewScreen(),
-        item: ItemConfig(
-          icon: FaIcon(FontAwesomeIcons.earthAmericas),
-          title: "Connect",
-        ),
-      ),
-      PersistentTabConfig(
-        screen: const RandomCallScreen(),
-        item: ItemConfig(
-          icon: FaIcon(FontAwesomeIcons.shuffle),
-          title: "Random",
-        ),
-      ),
-      // PersistentTabConfig(
-      //   screen: ChatScreen(
-      //     otherUserId:
-      //         'haaJCmi8plTE8Wxd1nIpU9uhuuf2', //otherUserId!,
+  @override
+  void dispose() {
+    _exitTimer?.cancel();
+    super.dispose();
+  }
 
-      //     otherUserName: 'Pixel XL Pro',
-      //     profileImage: '',
-      //   ),
-      //   item: ItemConfig(
-      //     icon: FaIcon(FontAwesomeIcons.message),
-      //     title: "Random Call",
-      //   ),
-      // ),
-      PersistentTabConfig(
-        screen: const InboxScreen(),
-        item: ItemConfig(
-          icon: FaIcon(FontAwesomeIcons.solidMessage),
-          title: "Chat",
+  Future<bool> _onWillPop() async {
+    // Not on home → go home
+    if (_index != 0) {
+      setState(() => _index = 0);
+      _exitTimer?.cancel();
+      _exitArmed = false;
+      return false;
+    }
+    // On home, second press → exit
+    if (_exitArmed) {
+      _exitTimer?.cancel();
+      return true;
+    }
+    // On home, first press → arm
+    _exitArmed = true;
+    _exitTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) _exitArmed = false;
+    });
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Press back again to exit'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
         ),
       ),
-      PersistentTabConfig(
-        screen: const ProfileScreen(),
-        item: ItemConfig(
-          icon: FaIcon(FontAwesomeIcons.user),
-          title: "Profile",
-        ),
-      ),
-    ];
+    );
+    return false;
   }
 
   @override
   Widget build(BuildContext context) {
-    return PersistentTabView(
-      controller: _controller,
-      tabs: _buildTabs(context),
-      gestureNavigationEnabled: false,
+    final c = AppColors.of(context);
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
 
-      navBarBuilder: (navBarConfig) => NeumorphicBottomNavBar(
-        navBarConfig: navBarConfig,
-        height: 70,
-        navBarDecoration: NavBarDecoration(
-          color: const Color.fromARGB(206, 255, 255, 255),
-          borderRadius: BorderRadius.circular(8),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (_, __) async {
+        final shouldExit = await _onWillPop();
+        if (shouldExit) SystemNavigator.pop();
+      },
+      child: Scaffold(
+        body: IndexedStack(index: _index, children: _screens),
+        bottomNavigationBar: _NavBar(
+          index: _index,
+          onTap: _onTap,
+          c: c,
+          isDark: isDark,
         ),
       ),
     );
   }
 }
-// class _PersistentBottomNavBarState
-//     extends State<PersistentBottomNavBar> {
-//   late final PersistentTabController _controller;
-//   late final List<PersistentTabConfig> _tabs;
 
-//   @override
-//   void initState() {
-//     super.initState();
+// ── Custom nav bar ────────────────────────────────────────────────────────────
 
-//     _controller = PersistentTabController(initialIndex: 0);
+class _NavBar extends StatelessWidget {
+  const _NavBar({
+    required this.index,
+    required this.onTap,
+    required this.c,
+    required this.isDark,
+  });
 
-//     _tabs = [
-//       PersistentTabConfig(
-//         screen: const HostsGridViewScreen(),
-//         item: ItemConfig(
-//           icon: FaIcon(FontAwesomeIcons.earthAmericas),
-//           title: "Connect",
-//         ),
-//       ),
-//       PersistentTabConfig(
-//         screen: const RandomCallScreen(),
-//         item:  ItemConfig(
-//           icon: FaIcon(FontAwesomeIcons.shuffle),
-//           title: "Random",
-//         ),
-//       ),
-//       PersistentTabConfig(
-//         screen: const InboxScreen(),
-//         item:  ItemConfig(
-//           icon: FaIcon(FontAwesomeIcons.solidMessage),
-//           title: "Chat",
-//         ),
-//       ),
-//       PersistentTabConfig(
-//         screen: const ProfileScreen(),
-//         item:  ItemConfig(
-//           icon: FaIcon(FontAwesomeIcons.user),
-//           title: "Profile",
-//         ),
-//       ),
-//     ];
-//   }
+  final int index;
+  final ValueChanged<int> onTap;
+  final AppColors c;
+  final bool isDark;
 
-//   @override
-//   Widget build(BuildContext context) {
-//     return PersistentTabView(
-//       controller: _controller,
-//       tabs: _tabs,
-//       gestureNavigationEnabled: false,
-//       navBarBuilder: (navBarConfig) => NeumorphicBottomNavBar(
-//         navBarConfig: navBarConfig,
-//         height: 60,
-//         navBarDecoration: NavBarDecoration(
-//           color: const Color.fromARGB(206, 255, 255, 255),
-//           borderRadius: BorderRadius.circular(8),
-//         ),
-//       ),
-//     );
-//   }
-// }
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 64 + MediaQuery.of(context).padding.bottom,
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border(
+          top: BorderSide(color: c.border, width: 0.5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(
+              alpha: isDark ? 0.4 : 0.08,
+            ),
+            blurRadius: 12,
+            offset: const Offset(0, -3),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            _NavItem(
+              icon: FontAwesomeIcons.earthAmericas,
+              label: 'Connect',
+              selected: index == 0,
+              onTap: () => onTap(0),
+              c: c,
+            ),
+            _NavItem(icon: Icons.abc, label: "chat", selected: index == 4, onTap: () => onTap(4), c: c),
+            _NavItem(
+              icon: FontAwesomeIcons.shuffle,
+              label: 'Random',
+              selected: index == 1,
+              onTap: () => onTap(1),
+              c: c,
+            ),
+            _NavItem(
+              icon: FontAwesomeIcons.solidMessage,
+              label: 'Inbox',
+              selected: index == 2,
+              onTap: () => onTap(2),
+              c: c,
+            ),
+            _NavItem(
+              icon: FontAwesomeIcons.user,
+              label: 'Profile',
+              selected: index == 3,
+              onTap: () => onTap(3),
+              c: c,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  const _NavItem({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    required this.c,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final AppColors c;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedScale(
+                scale: selected ? 1.15 : 1.0,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                child: FaIcon(
+                  icon,
+                  size: 20,
+                  color: selected ? c.pink : c.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: selected
+                      ? FontWeight.w600
+                      : FontWeight.w400,
+                  color: selected ? c.pink : c.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                height: 2,
+                width: selected ? 18 : 0,
+                decoration: BoxDecoration(
+                  color: c.pink,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

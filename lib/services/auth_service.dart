@@ -1,122 +1,165 @@
-// import 'package:cloud_firestore/cloud_firestore.dart';
-// import 'package:firebase_auth/firebase_auth.dart';
-// import 'package:flutter/foundation.dart';
-// import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// final authServiceProvider = Provider((ref) => AuthService());
-
-// class AuthService {
-//   final FirebaseAuth _auth = FirebaseAuth.instance;
-//   final FirebaseFirestore _firestore =
-//       FirebaseFirestore.instance;
-
-//   Future<void> signInAnonymouslyIfNeeded() async {
-//     // 1. Wait for Firebase to restore any existing session from local cache
-//     await _auth.authStateChanges().first;
-
-//     // 2. Only sign in if the cache came back empty
-//     if (_auth.currentUser == null) {
-//       try {
-//         final cred = await _auth.signInAnonymously();
-
-//         // 3. ZERO READ OPTIMIZATION: Only write to Firestore if it's a brand new account
-//         if (cred.additionalUserInfo?.isNewUser == true) {
-//           await _createInitialUserDoc(cred.user!);
-//         }
-//       } catch (e) {
-//         debugPrint("Error during anonymous sign-in: $e");
-//       }
-//     }
-//   }
-
-//   Future<void> _createInitialUserDoc(User user) async {
-//     final userDoc = _firestore.collection('users').doc(user.uid);
-//     await userDoc.set({
-//       'uid': user.uid,
-//       'isAnonymous': user.isAnonymous,
-//       'name': 'User${user.uid.substring(0, 6)}',
-//       'photoUrl': '',
-//       'role': 'user',
-//       'createdAt': FieldValue.serverTimestamp(),
-//     });
-//   }
-// }
 // lib/services/auth_service.dart
+//
+// Firebase Auth — Phone, Google, Facebook (stubbed) wired.
+//
+// pubspec.yaml — add:
+//   google_sign_in: ^6.2.1
+//
+// Android — SHA-1 fingerprint must be in Firebase Console → Project Settings.
+//   Run: cd android && ./gradlew signingReport
+//
+// iOS — add REVERSED_CLIENT_ID from GoogleService-Info.plist to Info.plist:
+//   CFBundleURLTypes > CFBundleURLSchemes > com.googleusercontent.apps.YOUR_ID
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cheerchat/models/app_user.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 final authServiceProvider = Provider((ref) => AuthService());
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
 
-  bool _isSigningIn = false;
+  // ── Phone OTP — Step 1 ────────────────────────────────────────────────────
 
-  Future<void> signInAnonymouslyIfNeeded() async {
-    if (_isSigningIn) return;
-    _isSigningIn = true;
-
-    try {
-      await _auth.authStateChanges().first;
-      if (_auth.currentUser != null) return;
-
-      const maxRetries = 3;
-      int retryCount = 0;
-
-      while (retryCount < maxRetries) {
+  Future<void> verifyPhone({
+    required String phoneNumber,
+    required void Function(String verificationId) onCodeSent,
+    required void Function(String error) onError,
+    required void Function(UserCredential) onAutoVerified,
+  }) async {
+    await _auth.verifyPhoneNumber(
+      phoneNumber: phoneNumber,
+      timeout: const Duration(seconds: 60),
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        // Android instant-verify (SMS auto-read)
         try {
-          final cred = await _auth.signInAnonymously();
-
-          if (cred.additionalUserInfo?.isNewUser == true) {
-            await _createInitialUserDoc(cred.user!);
-          }
-
-          debugPrint(
-            "[AuthService] Successfully signed in anonymously.",
+          final result = await _auth.signInWithCredential(
+            credential,
           );
-          return;
-        } on FirebaseAuthException catch (e) {
-          debugPrint("[AuthService] signIn error: ${e.code}");
-
-          if (e.code != 'network-request-failed') rethrow;
-
-          retryCount++;
-          if (retryCount >= maxRetries) {
-            debugPrint(
-              "[AuthService] Max auth retries reached.",
-            );
-            rethrow;
-          }
-
-          await Future.delayed(const Duration(seconds: 2));
+          onAutoVerified(result);
+        } catch (e) {
+          onError(
+            'Auto-verification failed. Please enter the code manually.',
+          );
         }
-      }
-    } finally {
-      _isSigningIn = false;
-    }
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        debugPrint(
+          '[AuthService] Phone verify failed: ${e.code} ${e.message}',
+        );
+        switch (e.code) {
+          case 'invalid-phone-number':
+            onError(
+              'Invalid phone number. Check the country code and number.',
+            );
+          case 'too-many-requests':
+            onError(
+              'Too many attempts. Please try again later.',
+            );
+          case 'quota-exceeded':
+            onError('SMS quota exceeded. Try again tomorrow.');
+          case 'captcha-check-failed':
+            onError('reCAPTCHA check failed. Please try again.');
+          default:
+            onError(
+              e.message ?? 'Verification failed. Try again.',
+            );
+        }
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        debugPrint(
+          '[AuthService] OTP sent. vid: $verificationId',
+        );
+        onCodeSent(verificationId);
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {
+        debugPrint('[AuthService] SMS auto-retrieval timeout');
+      },
+    );
   }
 
-  Future<void> _createInitialUserDoc(User user) async {
-    final userDoc = _firestore.collection('users').doc(user.uid);
-    
-    final newUser = AppUser(
-      uid: user.uid,
-      name: 'User${user.uid.substring(0, 6)}',
-      role: 'user', 
-      coins: 0, 
-      isOnline: false, 
+  // ── Phone OTP — Step 2 ────────────────────────────────────────────────────
+
+  Future<UserCredential> signInWithOtp({
+    required String verificationId,
+    required String smsCode,
+  }) async {
+    final credential = PhoneAuthProvider.credential(
+      verificationId: verificationId,
+      smsCode: smsCode,
+    );
+    final result = await _auth.signInWithCredential(credential);
+    debugPrint(
+      '[AuthService] Phone sign-in complete: ${result.user?.uid}',
+    );
+    return result;
+  }
+
+  // ── Google ────────────────────────────────────────────────────────────────
+
+  Future<UserCredential?> signInWithGoogle() async {
+    final googleUser = await GoogleSignIn().signIn();
+    if (googleUser == null) {
+      debugPrint(
+        '[AuthService] Google sign-in cancelled by user',
+      );
+      return null; // user cancelled — not an error
+    }
+
+    final googleAuth = await googleUser.authentication;
+
+    if (googleAuth.accessToken == null &&
+        googleAuth.idToken == null) {
+      throw FirebaseAuthException(
+        code: 'token-missing',
+        message: 'Failed to get Google authentication tokens.',
+      );
+    }
+
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
     );
 
-    final userData = newUser.toMap();
-    userData['createdAt'] = FieldValue.serverTimestamp();
+    final result = await _auth.signInWithCredential(credential);
+    debugPrint(
+      '[AuthService] Google sign-in: ${result.user?.uid}',
+    );
+    return result;
+  }
 
-    await userDoc.set(userData);
-    debugPrint("[AuthService] Initial user document created for ${user.uid}");
+  // ── Facebook — STUB (not yet enabled) ────────────────────────────────────
+  // To wire up: add flutter_facebook_auth: ^7.0.1 to pubspec.yaml
+  // and follow AUTH_SETUP.md for Android/iOS config.
+
+  Future<UserCredential?> signInWithFacebook() async {
+    throw UnimplementedError('Facebook sign-in coming soon.');
+  }
+
+  // ── Sign out ──────────────────────────────────────────────────────────────
+
+  Future<void> signOut() async {
+    try {
+      await GoogleSignIn().signOut();
+    } catch (_) {}
+    await _auth.signOut();
+    debugPrint('[AuthService] Signed out.');
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  User? get currentUser => _auth.currentUser;
+  bool get isSignedIn => _auth.currentUser != null;
+
+  Future<String?> getIdToken({bool forceRefresh = false}) async {
+    try {
+      return await _auth.currentUser?.getIdToken(forceRefresh);
+    } catch (e) {
+      debugPrint('[AuthService] Failed to get token: $e');
+      return null;
+    }
   }
 }

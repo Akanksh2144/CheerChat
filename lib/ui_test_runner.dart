@@ -1,136 +1,114 @@
-// import 'package:flutter/material.dart';
-// import 'package:cheerchat/screens_notcompleted/ongoing_call_screen.dart';
-// import 'package:cheerchat/services/agora_service.dart';
-// // Ensure this path is correct
-// // Import your OngoingCallScreen file here if it's in a different file
 
-// void main() {
-//   runApp(
-//     const MaterialApp(
-//       debugShowCheckedModeBanner: false,
-//       home: UITestEntryScreen(),
-//     ),
-//   );
-// }
+// // lib/ui_test_runner.dart
+// //
+// // Standalone entry point for UI testing without a backend or real Agora token.
+// // Run this instead of main.dart when you want to preview screens in isolation.
+// //
+// // Usage:
+// //   flutter run -t lib/ui_test_runner.dart
 
-// class UITestEntryScreen extends StatelessWidget {
-//   const UITestEntryScreen({super.key});
+import 'package:cheerchat/data/hosts_data.dart';
+import 'package:cheerchat/screens/ongoing_call_screen.dart';
+import 'package:cheerchat/screens/profile_details_screen.dart';
+import 'package:cheerchat/screens/hosts_grid_view.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(title: const Text('UI Sandbox')),
-//       body: Center(
-//         child: ElevatedButton(
-//           onPressed: () {
-//             Navigator.push(
-//               context,
-//               MaterialPageRoute(
-//                 builder: (context) => OngoingCallScreen(
-//                   agoraService:
-//                       FakeAgoraService(), // 👉 Injecting the Fake
-//                   channelId: 'test_room',
-//                   token: 'dummy_token',
-//                   localUid: 1,
-//                 ),
-//               ),
-//             );
-//           },
-//           child: const Text('Launch Ongoing Call UI'),
-//         ),
-//       ),
-//     );
-//   }
-// }
+void main() {
+  runApp(
+    const ProviderScope(
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'CheerChat UI Sandbox',
+        home: UITestMenu(),
+      ),
+    ),
+  );
+}
 
-// /// =========================================
-// /// FAKE SERVICE FOR UI TESTING ONLY
-// /// =========================================
-// class FakeAgoraService extends AgoraService {
-//   @override
-//   Future<void> initialize({
-//     required String appId,
-//     required Future<String> Function() fetchNewToken,
-//   }) async {
-//     // Simulate a 1.5 second network delay for initialization
-//     await Future.delayed(const Duration(milliseconds: 1500));
-//   }
+class UITestMenu extends StatelessWidget {
+  const UITestMenu({super.key});
 
-//   @override
-//   Future<void> join({
-//     required String token,
-//     required String channelId,
-//     required int uid,
-//   }) async {
-//     // Simulate a 1-second network delay for joining the channel
-//     await Future.delayed(const Duration(seconds: 1));
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF121212),
+      appBar: AppBar(
+        title: const Text('UI Sandbox'),
+        backgroundColor: Colors.pink,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          _tile(
+            context,
+            icon: Icons.video_call,
+            label: 'Ongoing Call Screen (test mode)',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => OngoingCallScreen(
+                  host: dummyHosts.first,
+                  initialCoins: 1000,
+                  testMode: true,
+                  isAlreadyFollowing: false,
+                ),
+              ),
+            ),
+          ),
+          _tile(
+            context,
+            icon: Icons.person,
+            label: 'Host Profile Details',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    ProfileDetailsScreen(host: dummyHosts[2]),
+              ),
+            ),
+          ),
+          _tile(
+            context,
+            icon: Icons.grid_view,
+            label: 'Hosts Grid View',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const HostsGridViewScreen(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-//     // 👉 Simulate a remote user joining the call 3 seconds later!
-//     Future.delayed(const Duration(seconds: 3), () {
-//       remoteUids.value = {999}; // Adds a dummy user
-//     });
-//   }
-
-//   @override
-//   Widget buildLocalVideo() {
-//     // Fake local camera (PIP window)
-//     return Container(
-//       color: Colors.blueGrey.shade800,
-//       child: const Center(
-//         child: Icon(
-//           Icons.person,
-//           color: Colors.white54,
-//           size: 50,
-//         ),
-//       ),
-//     );
-//   }
-
-//   @override
-//   Widget buildRemoteVideo(int uid) {
-//     // Fake remote camera (Background)
-//     return Container(
-//       color: Colors.teal.shade900,
-//       child: Center(
-//         child: Column(
-//           mainAxisAlignment: MainAxisAlignment.center,
-//           children: [
-//             const Icon(
-//               Icons.account_circle,
-//               color: Colors.white,
-//               size: 100,
-//             ),
-//             const SizedBox(height: 16),
-//             Text(
-//               'User $uid Video Feed',
-//               style: const TextStyle(
-//                 color: Colors.white,
-//                 fontSize: 24,
-//               ),
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-
-//   @override
-//   Future<void> toggleMuteAudio() async {
-//     isAudioMuted.value = !isAudioMuted.value;
-//   }
-
-//   @override
-//   Future<void> toggleMuteVideo() async {
-//     isVideoMuted.value = !isVideoMuted.value;
-//   }
-
-//   @override
-//   Future<void> switchCamera() async {
-//     debugPrint("Camera Switched");
-//   }
-
-//   @override
-//   Future<void> leave() async {
-//     debugPrint("Call Ended");
-//   }
-// }
+  Widget _tile(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        tileColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        leading: Icon(icon, color: Colors.pink),
+        title: Text(
+          label,
+          style: const TextStyle(color: Colors.white),
+        ),
+        trailing: const Icon(
+          Icons.arrow_forward_ios,
+          color: Colors.white30,
+          size: 14,
+        ),
+        onTap: onTap,
+      ),
+    );
+  }
+}

@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "739076896699-ebcb5j6gap0vj485564c3mtqoelga09b.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.cheerchat.app",
+            "certificate_hash": "9c72d79b4f4485f153740a1eb24fbce734f0d655"
+          }
+        },
+        {
           "client_id": "739076896699-2b4aoj2atam2u051uhfms2tmht9nhnna.apps.googleusercontent.com",
           "client_type": 3
         }
