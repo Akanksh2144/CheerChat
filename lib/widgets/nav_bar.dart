@@ -12,7 +12,7 @@ import 'dart:async';
 import 'package:cheerchat/screens/chat_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_chat_ui/flutter_chat_ui.dart';
+// import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:cheerchat/screens/hosts_grid_view.dart';
@@ -161,7 +161,7 @@ class _NavBar extends StatelessWidget {
               onTap: () => onTap(0),
               c: c,
             ),
-            _NavItem(icon: Icons.abc, label: "chat", selected: index == 4, onTap: () => onTap(4), c: c),
+            // _NavItem(icon: Icons.abc, label: "chat", selected: index == 4, onTap: () => onTap(4), c: c),
             _NavItem(
               icon: FontAwesomeIcons.shuffle,
               label: 'Random',

@@ -21,6 +21,10 @@ class AppConstants {
 
   // ── API ───────────────────────────────────────────────────────────────────
   // TODO: Replace with your DigitalOcean App Platform URL
+  // static const String apiBaseUrl =
+  //     'https://your-api.digitalocean.app';
+  // static const String apiBaseUrl =
+  //   'http://10.0.2.2:3000';
   static const String apiBaseUrl =
-      'https://your-api.digitalocean.app';
+    'http://192.168.1.11:3000';
 }

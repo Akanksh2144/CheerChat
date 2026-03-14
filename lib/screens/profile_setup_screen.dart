@@ -105,7 +105,7 @@ class _ProfileSetupScreenState
   final _nameFocus = FocusNode();
 
   // ── Form state ────────────────────────────────────────────────────────────
-  String _gender = 'Female';
+  String _gender = 'Male';
   String _countryCode = 'IN';
   String _language = 'English';
   DateTime? _dob;

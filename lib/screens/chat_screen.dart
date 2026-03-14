@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:io';
 
@@ -265,6 +266,112 @@ class _ChatScreenState extends State<ChatScreen>
     } catch (e) {
       await messageRef.update({'isUploadFailed': true});
     }
+  }
+
+  // ── Chat options menu (3-dot in AppBar) ──────────────────────────────────
+  //
+  // Sets deletedFor.$uid = true and clearedAt.$uid = serverTimestamp()
+  // then pops back to inbox. The conversation reappears only when a new
+  // message arrives (sendMessage resets deletedFor for both sides).
+
+  void _showChatMenu(AppColors c) {
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: isDark ? c.card : Colors.white,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(20),
+          ),
+        ),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          12,
+          16,
+          MediaQuery.of(ctx).padding.bottom + 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: c.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withValues(
+                    alpha: 0.10,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.redAccent,
+                  size: 18,
+                ),
+              ),
+              title: Text(
+                'Delete Chat',
+                style: GoogleFonts.poppins(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+              subtitle: Text(
+                'Clears messages and hides from inbox',
+                style: GoogleFonts.poppins(
+                  color: c.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
+              onTap: () async {
+                Navigator.pop(ctx); // close sheet
+                await _deleteChat();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteChat() async {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUid == null) return;
+
+    final chatRoomId = _chatService.getChatRoomId(
+      currentUid,
+      widget.otherUserId,
+    );
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(chatRoomId)
+          .update({
+            'deletedFor.$currentUid': true,
+            'clearedAt.$currentUid':
+                FieldValue.serverTimestamp(),
+            'pinnedBy.$currentUid': false,
+            'unreadCount.$currentUid': 0,
+          });
+    } catch (_) {
+      // Room may not exist yet — nothing to delete
+    }
+
+    if (mounted) Navigator.of(context).pop();
   }
 
   // ── Gift picker ───────────────────────────────────────────────────────────
@@ -867,8 +974,16 @@ class _ChatScreenState extends State<ChatScreen>
           ),
           actions: [
             Padding(
-              padding: const EdgeInsets.only(right: 10),
+              padding: const EdgeInsets.only(right: 4),
               child: _CallButton(c: c),
+            ),
+            IconButton(
+              icon: Icon(
+                Icons.more_vert_rounded,
+                color: c.textSecondary,
+                size: 22,
+              ),
+              onPressed: () => _showChatMenu(c),
             ),
           ],
         ),

@@ -1,4 +1,3 @@
-
 // lib/screens/inbox_screen.dart
 //
 // Inbox — quick-access bubbles + chat list.
@@ -9,6 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cheerchat/screens/chat_screen.dart';
 import 'package:cheerchat/services/chat_services.dart';
 import 'package:cheerchat/theme/app_colors.dart';
+import 'package:cheerchat/utils/app_transitions.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -353,8 +353,8 @@ class _InboxScreenState extends State<InboxScreen> {
             _showChatOptions(doc.id, isPinned, currentUid),
         onTap: () =>
             Navigator.of(context, rootNavigator: true).push(
-              MaterialPageRoute(
-                builder: (_) => ChatScreen(
+              AppTransitions.slide(
+                ChatScreen(
                   otherUserId: otherUserId,
                   otherUserName: name,
                   profileImage: image,

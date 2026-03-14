@@ -1,3 +1,4 @@
+
 // lib/screens/login_page.dart
 //
 // Login / sign-up entry point.
@@ -17,7 +18,7 @@
 //   Wire up flutter_facebook_auth when ready.
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+// import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -383,7 +384,7 @@ class _LandingPage extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 28),
       child: Column(
         children: [
-          const SizedBox(height: 60),
+          const SizedBox(height: 72),
           _Logo(c: c),
           const SizedBox(height: 20),
           Text(
@@ -395,15 +396,15 @@ class _LandingPage extends StatelessWidget {
               letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
-            'Connect with amazing hosts',
+            'Where conversations feel good',
             style: GoogleFonts.poppins(
               color: c.textSecondary,
               fontSize: 14,
             ),
           ),
-          const SizedBox(height: 56),
+          const SizedBox(height: 80),
 
           // Phone — primary CTA
           _PrimaryButton(
@@ -433,7 +434,7 @@ class _LandingPage extends StatelessWidget {
               Expanded(child: Divider(color: c.border)),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
 
           // Social row: Google + Facebook
           Row(
@@ -470,7 +471,7 @@ class _LandingPage extends StatelessWidget {
             _ErrorBanner(message: error!, c: c),
           ],
 
-          const SizedBox(height: 40),
+          const SizedBox(height: 56),
         ],
       ),
     );

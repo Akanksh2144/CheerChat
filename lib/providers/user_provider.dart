@@ -18,6 +18,7 @@
 // // ─────────────────────────────────────────────────────────────────────────────
 
 // import 'dart:convert';
+// import 'dart:io';
 
 // import 'package:firebase_auth/firebase_auth.dart';
 // import 'package:flutter/foundation.dart';
@@ -28,7 +29,7 @@
 // import 'package:cheerchat/constants/app_constants.dart';
 // import 'package:cheerchat/models/app_user.dart';
 // import 'package:cheerchat/providers/auth_provider.dart';
-// import 'package:cheerchat/providers/user_provider.dart';
+// // import 'package:cheerchat/providers/connectivity_provider.dart';
 
 // // ─────────────────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,16 @@
 //   // ── Load ──────────────────────────────────────────────────────────────────
 
 //   Future<AppUser?> _loadUser(User fbUser) async {
+//     // ── Fast offline short-circuit ────────────────────────────────────
+//     // Check DNS reachability before attempting the 4 s API call.
+//     // This resolves in ~300 ms offline vs 4 s timeout, so the
+//     // splash screen disappears almost immediately with no internet.
+//     final online = await _isOnline();
+//     if (!online) {
+//       debugPrint('[UserProvider] Offline — loading from cache.');
+//       return _fromCache(fbUser.uid);
+//     }
+
 //     try {
 //       final serverUser = await _fetchFromServer(fbUser);
 //       if (serverUser != null) {
@@ -76,6 +87,20 @@
 //     }
 //   }
 
+//   Future<bool> _isOnline() async {
+//     try {
+//       final result = await InternetAddress.lookup(
+//         'google.com',
+//       ).timeout(const Duration(seconds: 3));
+//       return result.isNotEmpty &&
+//           result.first.rawAddress.isNotEmpty;
+//     } on SocketException {
+//       return false;
+//     } catch (_) {
+//       return false;
+//     }
+//   }
+
 //   Future<AppUser?> _fetchFromServer(User fbUser) async {
 //     final token = await fbUser.getIdToken();
 //     final res = await http
@@ -86,7 +111,7 @@
 //             'Content-Type': 'application/json',
 //           },
 //         )
-//         .timeout(const Duration(seconds: 10));
+//         .timeout(const Duration(seconds: 4));
 
 //     if (res.statusCode == 200) {
 //       return AppUser.fromJson(
@@ -215,7 +240,7 @@
 //                 'phone_number': fbUser.phoneNumber,
 //             }),
 //           )
-//           .timeout(const Duration(seconds: 10));
+//           .timeout(const Duration(seconds: 4));
 
 //       if (res.statusCode == 200 || res.statusCode == 201) {
 //         final serverUser = AppUser.fromJson(
@@ -279,6 +304,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -289,6 +315,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cheerchat/constants/app_constants.dart';
 import 'package:cheerchat/models/app_user.dart';
 import 'package:cheerchat/providers/auth_provider.dart';
+// import 'package:cheerchat/providers/connectivity_provider.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -313,26 +340,74 @@ class CurrentUserNotifier extends AsyncNotifier<AppUser?> {
   // ── Load ──────────────────────────────────────────────────────────────────
 
   Future<AppUser?> _loadUser(User fbUser) async {
+    // ── Cache-first: return immediately if cached ─────────────────
+    // Returning users open the app with zero network wait.
+    // Server refresh happens silently in the background.
+    final cached = await _fromCache(fbUser.uid);
+    if (cached != null) {
+      debugPrint(
+        '[UserProvider] Cache hit — returning instantly.',
+      );
+      _backgroundRefresh(fbUser); // fire-and-forget
+      return cached;
+    }
+
+    // ── No cache — full load (new user / first install) ───────────
+    debugPrint('[UserProvider] No cache — full network load.');
+    final online = await _isOnline();
+    if (!online) return null;
+
     try {
       final serverUser = await _fetchFromServer(fbUser);
       if (serverUser != null) {
         await _cache(fbUser.uid, serverUser);
         return serverUser;
       }
-      // 404 — but user may have registered offline before; check cache first.
-      final cached = await _fromCache(fbUser.uid);
-      if (cached != null) {
-        debugPrint(
-          '[UserProvider] Server 404 but cache found — using cache.',
-        );
-        return cached;
-      }
-      return null; // genuinely new user → ProfileSetup
+      return null; // 404 — genuinely new user → ProfileSetupScreen
     } catch (e) {
-      debugPrint(
-        '[UserProvider] API unreachable, trying cache: $e',
-      );
-      return _fromCache(fbUser.uid);
+      debugPrint('[UserProvider] Full load failed: $e');
+      return null;
+    }
+  }
+
+  // ── Background refresh (stale-while-revalidate) ───────────────────────────
+  // Fires after serving cached data. Fetches server and updates state
+  // silently. Never interrupts the UI — errors are swallowed.
+
+  void _backgroundRefresh(User fbUser) {
+    Future.microtask(() async {
+      try {
+        final online = await _isOnline();
+        if (!online) return;
+        final serverUser = await _fetchFromServer(fbUser);
+        if (serverUser != null) {
+          await _cache(fbUser.uid, serverUser);
+          // Guard against logout race: only update if still same user
+          if (FirebaseAuth.instance.currentUser?.uid ==
+              fbUser.uid) {
+            state = AsyncData(serverUser);
+            debugPrint(
+              '[UserProvider] Background refresh applied.',
+            );
+          }
+        }
+      } catch (_) {
+        // Background — swallow all errors silently
+      }
+    });
+  }
+
+  Future<bool> _isOnline() async {
+    try {
+      final result = await InternetAddress.lookup(
+        'google.com',
+      ).timeout(const Duration(seconds: 3));
+      return result.isNotEmpty &&
+          result.first.rawAddress.isNotEmpty;
+    } on SocketException {
+      return false;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -346,7 +421,7 @@ class CurrentUserNotifier extends AsyncNotifier<AppUser?> {
             'Content-Type': 'application/json',
           },
         )
-        .timeout(const Duration(seconds: 10));
+        .timeout(const Duration(seconds: 4));
 
     if (res.statusCode == 200) {
       return AppUser.fromJson(
@@ -475,7 +550,7 @@ class CurrentUserNotifier extends AsyncNotifier<AppUser?> {
                 'phone_number': fbUser.phoneNumber,
             }),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 4));
 
       if (res.statusCode == 200 || res.statusCode == 201) {
         final serverUser = AppUser.fromJson(

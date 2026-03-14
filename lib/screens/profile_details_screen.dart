@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:adaptive_action_sheet/adaptive_action_sheet.dart';
 import 'package:awesome_dialog/awesome_dialog.dart';
 import 'package:cheerchat/models/host_model.dart';
+import 'package:cheerchat/utils/app_transitions.dart';
 import 'package:flag/flag_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -914,19 +915,14 @@ class _ProfileDetailsScreenState
     List<String> photos,
     int startIndex,
   ) {
-    Navigator.of(context).push(
-      PageRouteBuilder<void>(
+    Navigator.of(context, rootNavigator: true).push(
+      AppTransitions.fade(
+        _FullScreenPhotoViewer(
+          photos: photos,
+          initialIndex: startIndex,
+        ),
         opaque: false,
         barrierColor: Colors.black,
-        pageBuilder: (ctx, animation, _) {
-          return FadeTransition(
-            opacity: animation,
-            child: _FullScreenPhotoViewer(
-              photos: photos,
-              initialIndex: startIndex,
-            ),
-          );
-        },
       ),
     );
   }

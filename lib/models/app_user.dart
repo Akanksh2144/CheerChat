@@ -120,7 +120,10 @@ class AppUser {
   factory AppUser.fromJson(Map<String, dynamic> json) {
     return AppUser(
       uid: json['uid'] as String? ?? '',
-      publicId: json['public_id'] as int? ?? 0,
+      // publicId: json['public_id'] as int? ?? 0,
+      publicId: json['public_id'] is int
+          ? json['public_id'] as int
+          : int.tryParse(json['public_id'].toString()) ?? 0,
       displayName: json['display_name'] as String? ?? 'User',
       profilePhotoUrl: json['profile_photo_url'] as String?,
       bio: json['bio'] as String?,
@@ -133,8 +136,14 @@ class AppUser {
           ? DateTime.tryParse(json['date_of_birth'] as String)
           : null,
       role: json['role'] as String? ?? 'user',
-      level: json['level'] as int? ?? 1,
-      coins: json['coins'] as int? ?? 0,
+      // level: json['level'] as int? ?? 1,
+      level: json['level'] is int
+          ? json['level'] as int
+          : int.tryParse(json['level'].toString()) ?? 0,
+      // coins: json['coins'] as int? ?? 0,
+      coins: json['coins'] is int
+          ? json['coins'] as int
+          : int.tryParse(json['coins'].toString()) ?? 0,
       isOnline: json['is_online'] as bool? ?? false,
       isHost: json['is_host'] as bool? ?? false,
       createdAt: json['created_at'] != null
