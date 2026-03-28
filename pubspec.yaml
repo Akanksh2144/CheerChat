@@ -70,6 +70,8 @@ dependencies:
   geocoding: ^4.0.0
   geolocator: ^12.0.0
   animations: ^2.0.0
+  flutter_callkit_incoming: ^3.0.0
+
 
 
 
@@ -86,6 +88,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -133,3 +136,14 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  # Fallback image for older Android versions and standard iOS icon
+  image_path: "assets/icon/cheerchat_app_logo.png"
+   
+  
+  # Adaptive Icon settings for modern Android
+  adaptive_icon_background: "assets/icon/cheerchat_background.png"  #"#7b0050" #"#B01254" # The hex color code for the background
+  adaptive_icon_foreground: "assets/icon/cheerchat_foreground.png" # Your transparent chat bubble

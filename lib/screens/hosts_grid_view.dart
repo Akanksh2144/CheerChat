@@ -1,9 +1,9 @@
 
 // lib/screens/hosts_grid_view.dart
 
-import 'package:cheerchat/data/hosts_data.dart';
 import 'package:cheerchat/models/host_model.dart';
 import 'package:cheerchat/providers/filters_provider.dart';
+import 'package:cheerchat/providers/hosts_provider.dart';
 import 'package:cheerchat/screens/filters_screen.dart';
 import 'package:cheerchat/theme/app_colors.dart';
 import 'package:cheerchat/utils/app_transitions.dart';
@@ -131,7 +131,7 @@ class _HostsGridViewScreenState
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
     final filters = ref.watch(filtersProvider);
-    final filteredHosts = _applyFilters(dummyHosts, filters);
+    final hostsAsync = ref.watch(hostsProvider);
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -178,12 +178,53 @@ class _HostsGridViewScreenState
       body: ref
           .watch(connectivityProvider)
           .when(
-            loading: () => _buildGrid(filteredHosts, filters),
-            error: (_, __) => _buildGrid(filteredHosts, filters),
+            loading: () => hostsAsync.when(
+              data: (hosts) => _buildGrid(hosts, filters),
+              loading: () => _buildLoadingState(),
+              error: (_, __) => _buildErrorState(),
+            ),
+            error: (_, __) => hostsAsync.when(
+              data: (hosts) => _buildGrid(hosts, filters),
+              loading: () => _buildLoadingState(),
+              error: (_, __) => _buildErrorState(),
+            ),
             data: (isOnline) => isOnline
-                ? _buildGrid(filteredHosts, filters)
+                ? hostsAsync.when(
+                    data: (hosts) => _buildGrid(hosts, filters),
+                    loading: () => _buildLoadingState(),
+                    error: (_, __) => _buildErrorState(),
+                  )
                 : _buildOfflineState(),
           ),
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return const Center(child: CircularProgressIndicator());
+  }
+
+  Widget _buildErrorState() {
+    final c = AppColors.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline, size: 48, color: c.textSecondary),
+          const SizedBox(height: 16),
+          Text(
+            'Failed to load hosts',
+            style: GoogleFonts.poppins(
+              color: c.textSecondary,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () => ref.read(hostsProvider.notifier).refresh(),
+            child: Text('Retry', style: TextStyle(color: c.pink)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -206,17 +247,19 @@ class _HostsGridViewScreenState
       child: filteredHosts.isEmpty
           ? _buildEmptyState(filters)
           : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: GridView.builder(
-                  itemCount: filteredHosts.length,
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 14,
-                        crossAxisSpacing: 14,
-                        childAspectRatio: 6 / 8,
-                      ),
+              child: RefreshIndicator(
+                onRefresh: () => ref.read(hostsProvider.notifier).refresh(),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: GridView.builder(
+                    itemCount: filteredHosts.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 14,
+                          crossAxisSpacing: 14,
+                          childAspectRatio: 6 / 8,
+                        ),
                   itemBuilder: (context, index) => HostCard(
                     key: ValueKey(filteredHosts[index].userId),
                     host: filteredHosts[index],
@@ -224,6 +267,7 @@ class _HostsGridViewScreenState
                 ),
               ),
             ),
+          ),
     );
   }
 

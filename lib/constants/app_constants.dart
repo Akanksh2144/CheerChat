@@ -25,6 +25,8 @@ class AppConstants {
   //     'https://your-api.digitalocean.app';
   // static const String apiBaseUrl =
   //   'http://10.0.2.2:3000';
+  // static const String apiBaseUrl =
+  //   'http://192.168.1.11:3000';
   static const String apiBaseUrl =
-    'http://192.168.1.11:3000';
+      'https://cheerchat-api-m3mvn.ondigitalocean.app';
 }

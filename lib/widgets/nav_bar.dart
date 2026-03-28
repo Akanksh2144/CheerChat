@@ -1,4 +1,3 @@
-
 // lib/widgets/nav_bar.dart
 //
 // Custom bottom nav — IndexedStack keeps all tabs alive (no re-init on switch).
@@ -9,17 +8,16 @@
 
 import 'dart:async';
 
-import 'package:cheerchat/screens/chat_screen.dart';
+// import 'package:cheerchat/screens/chat_screen.dart';
+import 'package:cheerchat/screens/hosts_grid_view.dart';
+import 'package:cheerchat/screens/inbox_screen.dart';
+import 'package:cheerchat/screens/profile_screen.dart';
+import 'package:cheerchat/screens/random_call_screen.dart';
+import 'package:cheerchat/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 // import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-
-import 'package:cheerchat/screens/hosts_grid_view.dart';
-import 'package:cheerchat/screens/inbox_screen.dart';
-import 'package:cheerchat/screens/random_call_screen.dart';
-import 'package:cheerchat/screens/profile_screen.dart';
-import 'package:cheerchat/theme/app_colors.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key, required this.uid});
@@ -39,7 +37,6 @@ class _AppShellState extends State<AppShell> {
     RandomCallScreen(),
     InboxScreen(),
     ProfileScreen(),
-    ChatScreen(otherUserId: 'haaJCmi8plTE8Wxd1nIpU9uhuuf2',otherUserName: 'Pixel XL Pro',profileImage: '',),
   ];
 
   void _onTap(int i) {
@@ -176,6 +173,7 @@ class _NavBar extends StatelessWidget {
               onTap: () => onTap(2),
               c: c,
             ),
+
             _NavItem(
               icon: FontAwesomeIcons.user,
               label: 'Profile',
@@ -183,6 +181,7 @@ class _NavBar extends StatelessWidget {
               onTap: () => onTap(3),
               c: c,
             ),
+
           ],
         ),
       ),

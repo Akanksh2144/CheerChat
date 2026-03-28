@@ -1,4 +1,3 @@
-
 // lib/screens/login_page.dart
 //
 // Login / sign-up entry point.
@@ -241,9 +240,10 @@ class _LoginPageState extends ConsumerState<LoginPage>
 
   void _facebookSignIn() {
     ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
+      ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
+          duration: const Duration(milliseconds: 1500),
           content: Row(
             children: [
               const Text('👍', style: TextStyle(fontSize: 16)),
@@ -263,7 +263,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          duration: const Duration(seconds: 2),
+          // duration: const Duration(seconds: 2),
         ),
       );
   }
@@ -380,99 +380,108 @@ class _LandingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sh = MediaQuery.of(context).size.height;
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Column(
-        children: [
-          const SizedBox(height: 72),
-          _Logo(c: c),
-          const SizedBox(height: 20),
-          Text(
-            'CheerChat',
-            style: GoogleFonts.poppins(
-              color: c.textPrimary,
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight:
+              sh -
+              MediaQuery.of(context).padding.top -
+              MediaQuery.of(context).padding.bottom,
+        ),
+        child: Column(
+          children: [
+            SizedBox(height: sh * 0.12),
+            _Logo(c: c),
+            const SizedBox(height: 20),
+            Text(
+              'CheerChat',
+              style: GoogleFonts.poppins(
+                color: c.textPrimary,
+                fontSize: 30,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Where conversations feel good',
-            style: GoogleFonts.poppins(
-              color: c.textSecondary,
-              fontSize: 14,
+            const SizedBox(height: 8),
+            Text(
+              'Where conversations feel good',
+              style: GoogleFonts.poppins(
+                color: c.textSecondary,
+                fontSize: 14,
+              ),
             ),
-          ),
-          const SizedBox(height: 80),
+            SizedBox(height: sh * 0.15),
 
-          // Phone — primary CTA
-          _PrimaryButton(
-            c: c,
-            label: 'Continue with Phone',
-            icon: Icons.phone_rounded,
-            onTap: loading ? null : onPhone,
-          ),
-          const SizedBox(height: 16),
+            // Phone — primary CTA
+            _PrimaryButton(
+              c: c,
+              label: 'Continue with Phone',
+              icon: Icons.phone_rounded,
+              onTap: loading ? null : onPhone,
+            ),
+            const SizedBox(height: 16),
 
-          // Divider
-          Row(
-            children: [
-              Expanded(child: Divider(color: c.border)),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                ),
-                child: Text(
-                  'or',
-                  style: GoogleFonts.poppins(
-                    color: c.textSecondary,
-                    fontSize: 12,
+            // Divider
+            Row(
+              children: [
+                Expanded(child: Divider(color: c.border)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                  ),
+                  child: Text(
+                    'or',
+                    style: GoogleFonts.poppins(
+                      color: c.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
-              ),
-              Expanded(child: Divider(color: c.border)),
-            ],
-          ),
-          const SizedBox(height: 24),
+                Expanded(child: Divider(color: c.border)),
+              ],
+            ),
+            const SizedBox(height: 24),
 
-          // Social row: Google + Facebook
-          Row(
-            children: [
-              Expanded(
-                child: _SocialButton(
-                  c: c,
-                  isDark: isDark,
-                  label: 'Google',
-                  asset: 'assets/icons/google.png',
-                  fallbackIcon: Icons.g_mobiledata_rounded,
-                  onTap: loading ? null : onGoogle,
+            // Social row: Google + Facebook
+            Row(
+              children: [
+                Expanded(
+                  child: _SocialButton(
+                    c: c,
+                    isDark: isDark,
+                    label: 'Google',
+                    asset: 'assets/icons/google.png',
+                    fallbackIcon: Icons.g_mobiledata_rounded,
+                    onTap: loading ? null : onGoogle,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _SocialButton(
-                  c: c,
-                  isDark: isDark,
-                  label: 'Facebook',
-                  asset: 'assets/icons/facebook.png',
-                  fallbackIcon: Icons.facebook_rounded,
-                  // Facebook is always tappable — never blocked by _loading
-                  onTap: onFacebook,
-                  comingSoon: true,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _SocialButton(
+                    c: c,
+                    isDark: isDark,
+                    label: 'Facebook',
+                    asset: 'assets/icons/facebook.png',
+                    fallbackIcon: Icons.facebook_rounded,
+                    // Facebook is always tappable — never blocked by _loading
+                    onTap: onFacebook,
+                    comingSoon: true,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
 
-          // Error banner (Google / Phone only — Facebook uses snackbar)
-          if (error != null) ...[
-            const SizedBox(height: 18),
-            _ErrorBanner(message: error!, c: c),
+            // Error banner (Google / Phone only — Facebook uses snackbar)
+            if (error != null) ...[
+              const SizedBox(height: 18),
+              _ErrorBanner(message: error!, c: c),
+            ],
+
+            const SizedBox(height: 56),
           ],
-
-          const SizedBox(height: 56),
-        ],
+        ),
       ),
     );
   }
@@ -957,11 +966,13 @@ class _Logo extends StatelessWidget {
         shape: BoxShape.circle,
         gradient: LinearGradient(
           colors: [
-            c.pink,
-            Color.lerp(c.pink, const Color(0xFF7B0050), 0.55)!,
+            Color(0xFFE91E8C), 
+            Color(0xFF6A1B9A)
+            // c.pink,
+            // Color.lerp(c.pink, const Color(0xFF7B0050), 0.55)!,
           ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
         ),
         boxShadow: [
           BoxShadow(

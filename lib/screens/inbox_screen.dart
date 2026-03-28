@@ -132,7 +132,7 @@ class _InboxScreenState extends State<InboxScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${item.label} coming soon!'),
-            duration: const Duration(seconds: 1),
+            duration: Duration(milliseconds: 1000),
             backgroundColor: c.pink,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(

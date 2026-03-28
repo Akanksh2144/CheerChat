@@ -1,36 +1,46 @@
-
 import 'dart:async';
 
 import 'package:cheerchat/constants/app_constants.dart';
-import 'package:cheerchat/constants/gift_constants.dart';
 import 'package:cheerchat/models/host_model.dart';
+import 'package:cheerchat/providers/follow_provider.dart';
+import 'package:cheerchat/providers/wallet_provider.dart';
 import 'package:cheerchat/services/agora_service.dart';
+import 'package:cheerchat/services/call_api_service.dart';
+import 'package:cheerchat/services/gift_api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 // ---------------------------------------------------------------------------
 // OngoingCallScreen
 //
-// Entry point — caller passes host + their current coin balance + Agora creds.
-// The screen owns AgoraService lifecycle entirely (creates → joins → disposes).
+// ✅ WIRED TO BACKEND:
+//   - sessionId from POST /api/calls/start (passed in from host_card)
+//   - _endCall → POST /api/calls/:sessionId/end
+//   - Token refresh → POST /api/calls/token
+//   - Wallet refresh on call end
+//
+// Entry point — caller passes host + coins + Agora creds + sessionId.
 //
 // How to push this screen:
 //   Navigator.push(context, MaterialPageRoute(
 //     builder: (_) => OngoingCallScreen(
 //       host: host,
 //       initialCoins: userCoins,
+//       sessionId: 'uuid-from-server',
 //       channelId: 'channel_abc',
 //       token: 'agora_token_from_server',
-//       localUid: myUid,
+//       localUid: 1,
 //     ),
 //   ));
 // ---------------------------------------------------------------------------
-class OngoingCallScreen extends StatefulWidget {
+class OngoingCallScreen extends ConsumerStatefulWidget {
   const OngoingCallScreen({
     super.key,
     required this.host,
     required this.initialCoins,
+    this.sessionId,
     this.channelId = 'test_channel',
     this.token = 'test_token',
     this.localUid = 0,
@@ -44,12 +54,15 @@ class OngoingCallScreen extends StatefulWidget {
   /// Real deduction happens server-side via Node.js billing ticks.
   final int initialCoins;
 
+  /// Server-generated call session ID (from POST /api/calls/start).
+  /// Required for ending the call and billing.
+  final String? sessionId;
+
   final String channelId;
   final String token;
   final int localUid;
 
   /// When true: skips Agora entirely, simulates a connected call after 2s.
-  /// Use this to test the UI without a real Agora App ID or token.
   final bool testMode;
 
   /// If user already follows this host before joining the call,
@@ -57,11 +70,12 @@ class OngoingCallScreen extends StatefulWidget {
   final bool isAlreadyFollowing;
 
   @override
-  State<OngoingCallScreen> createState() =>
+  ConsumerState<OngoingCallScreen> createState() =>
       _OngoingCallScreenState();
 }
 
-class _OngoingCallScreenState extends State<OngoingCallScreen>
+class _OngoingCallScreenState
+    extends ConsumerState<OngoingCallScreen>
     with WidgetsBindingObserver {
   // ── Agora ────────────────────────────────────────────────────────────────
   late final AgoraService _agora;
@@ -69,6 +83,7 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
   // ── Call state ───────────────────────────────────────────────────────────
   bool _isConnecting = true;
   bool _callEnded = false;
+  bool _remoteConnected = false;
   String? _errorMessage;
 
   // ── Timer & coins ────────────────────────────────────────────────────────
@@ -82,8 +97,7 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
   late bool _isFollowed;
   Offset _pipOffset = const Offset(20, 120);
 
-  // Chat overlay messages (live chat during call — stub list for now)
-  // TODO: wire up real Firestore messages for the call channel
+  // Chat overlay
   final List<_ChatMessage> _chatMessages = [];
   final TextEditingController _chatController =
       TextEditingController();
@@ -114,6 +128,8 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
       onBillableSessionStart: _onBillableSessionStart,
       onBillableSessionEnd: _onBillableSessionEnd,
     );
+    // Pre-fetch gift catalog so it's ready when user opens the sheet
+    ref.read(giftCatalogProvider);
     _startCall();
   }
 
@@ -129,19 +145,24 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
   }
 
   @override
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Pause local video when app goes to background
     if (state == AppLifecycleState.paused) {
-      _agora.toggleMuteVideo();
+      // Mute video when app goes to background
+      if (!_agora.isVideoMuted.value) {
+        _agora.toggleMuteVideo();
+      }
     } else if (state == AppLifecycleState.resumed) {
-      // Re-enable if it was muted by lifecycle only
+      // Unmute video when app returns to foreground
+      if (_agora.isVideoMuted.value) {
+        _agora.toggleMuteVideo();
+      }
     }
   }
 
   // ── Agora init ───────────────────────────────────────────────────────────
   Future<void> _startCall() async {
     if (widget.testMode) {
-      // Test mode: skip Agora, simulate host joining after 2 seconds
       await Future.delayed(const Duration(seconds: 2));
       if (!mounted) return;
       setState(() => _isConnecting = false);
@@ -149,13 +170,16 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
       return;
     }
 
-    // Real mode
     try {
       await _agora.initialize(
         appId: AppConstants.agoraAppId,
         fetchNewToken: () async {
-          // TODO: GET /api/calls/token?channel=channelId
-          return widget.token;
+          final callApi = ref.read(callApiServiceProvider);
+          final newToken = await callApi.getAgoraToken(
+            widget.channelId,
+            uid: widget.localUid,
+          );
+          return newToken ?? widget.token;
         },
       );
       await _agora.join(
@@ -163,6 +187,20 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
         channelId: widget.channelId,
         uid: widget.localUid,
       );
+
+      if (mounted) setState(() => _isConnecting = false);
+
+      // Wait 2 seconds for Agora to stabilize before listening to events.
+      // This eliminates the rapid join/leave glitch during channel setup.
+      await Future.delayed(const Duration(seconds: 2));
+      if (!mounted || _callEnded) return;
+
+      // Check if remote is already here
+      if (_agora.remoteUids.value.isNotEmpty) {
+        _remoteConnected = true;
+        if (mounted) setState(() {});
+      }
+
       _agora.remoteUids.addListener(_onRemoteUidsChanged);
     } catch (e) {
       if (mounted) setState(() => _errorMessage = e.toString());
@@ -170,30 +208,28 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
   }
 
   void _onRemoteUidsChanged() {
-    if (_agora.remoteUids.value.isNotEmpty && _isConnecting) {
-      if (mounted) setState(() => _isConnecting = false);
+    if (_callEnded) return;
+
+    if (_agora.remoteUids.value.isNotEmpty) {
+      _remoteConnected = true;
+      if (mounted) setState(() {});
+      return;
     }
-    if (_agora.remoteUids.value.isEmpty &&
-        !_isConnecting &&
-        !_callEnded) {
-      // Host left — end call
+
+    // Remote left after being connected → end immediately
+    if (_remoteConnected) {
       _endCall(hostLeft: true);
     }
   }
 
-  // ── Billing callbacks (fired by AgoraService) ────────────────────────────
+  // ── Billing callbacks ────────────────────────────────────────────────────
   void _onBillableSessionStart() {
-    // Tick duration every second
     _durationTimer = Timer.periodic(const Duration(seconds: 1), (
       _,
     ) {
       if (mounted) setState(() => _elapsedSeconds++);
     });
-
-    // Deduct immediately at 0:00 the moment host joins
     _deductCoins();
-
-    // Then deduct again every 60 seconds (at 1:00, 2:00, 3:00 ...)
     _coinDrainTimer = Timer.periodic(
       const Duration(seconds: 60),
       (_) {
@@ -230,7 +266,23 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
     _coinDrainTimer?.cancel();
     if (!widget.testMode) await _agora.leave();
     if (mounted) setState(() => _callEnded = true);
-    // TODO: POST /api/calls/end { channelId, duration: _elapsedSeconds }
+
+    // ✅ Tell the server the call ended
+    if (widget.sessionId != null) {
+      final callApi = ref.read(callApiServiceProvider);
+      final endedBy = hostLeft
+          ? 'host'
+          : outOfCoins
+          ? 'system'
+          : 'caller';
+      await callApi.endCall(
+        sessionId: widget.sessionId!,
+        endedBy: endedBy,
+      );
+    }
+
+    // ✅ Refresh wallet balance so home screen shows correct coins
+    ref.read(walletBalanceProvider.notifier).refresh();
   }
 
   // ── Chat ──────────────────────────────────────────────────────────────────
@@ -241,19 +293,17 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
       _chatMessages.add(_ChatMessage(text: text, isLocal: true));
     });
     _chatController.clear();
-    // TODO: send via Firestore call-channel subcollection
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    // Keep status bar hidden during call
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.immersiveSticky,
     );
 
     return PopScope(
-      canPop: false, // Back gesture must go through _endCall
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (!didPop) await _endCall();
       },
@@ -272,28 +322,17 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
           behavior: HitTestBehavior.opaque,
           child: Stack(
             children: [
-              // ── Layer 1: Remote video (full screen) ──────────────────────
               _buildRemoteVideo(),
-
-              // ── Layer 2: Draggable local PIP ─────────────────────────────
               _buildPip(),
-
-              // ── Layer 3: Hideable HUD ─────────────────────────────────────
               if (_uiVisible && !_callEnded) ...[
                 _buildTopBar(),
                 _buildChatOverlay(),
                 _buildRightActions(),
                 _buildBottomInput(),
               ],
-
-              // ── Layer 4: Connecting overlay ───────────────────────────────
               if (_isConnecting && !_callEnded)
                 _buildConnectingOverlay(),
-
-              // ── Layer 5: Error overlay ────────────────────────────────────
               if (_errorMessage != null) _buildErrorOverlay(),
-
-              // ── Layer 6: Call ended summary ───────────────────────────────
               if (_callEnded) _buildCallEndedOverlay(),
             ],
           ),
@@ -304,7 +343,6 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
 
   // ── Remote video ──────────────────────────────────────────────────────────
   Widget _buildRemoteVideo() {
-    // Test mode: show a solid background with host avatar instead of real video
     if (widget.testMode) {
       return Container(
         decoration: const BoxDecoration(
@@ -434,32 +472,30 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
             );
           });
         },
-        child: Container(
-          width: 110,
-          height: 150,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: Colors.white30,
-              width: 1.5,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            width: 110,
+            height: 150,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A2E),
+              boxShadow: const [
+                BoxShadow(blurRadius: 12, color: Colors.black54),
+              ],
             ),
-            boxShadow: const [
-              BoxShadow(blurRadius: 12, color: Colors.black54),
-            ],
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: widget.testMode
-              ? Container(
-                  color: const Color(0xFF2A2A2A),
-                  child: const Center(
-                    child: Icon(
-                      Icons.videocam,
-                      color: Colors.white30,
-                      size: 28,
+            child: widget.testMode
+                ? Container(
+                    color: const Color(0xFF2A2A2A),
+                    child: const Center(
+                      child: Icon(
+                        Icons.videocam,
+                        color: Colors.white30,
+                        size: 28,
+                      ),
                     ),
-                  ),
-                )
-              : _agora.buildLocalVideo(),
+                  )
+                : _agora.buildLocalVideo(),
+          ),
         ),
       ),
     );
@@ -474,12 +510,10 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
       right: 16,
       child: Row(
         children: [
-          // Host info chip — name, age, country flag + optional follow button
           _glassChip(
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Avatar
                 if (widget.host.profilePhotoUrl != null)
                   CircleAvatar(
                     radius: 14,
@@ -498,8 +532,6 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
                     ),
                   ),
                 const SizedBox(width: 9),
-
-                // Name + age + country
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -543,49 +575,56 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
                     ),
                   ],
                 ),
-
-                // Follow button — hidden if already following before call
                 if (!widget.isAlreadyFollowing) ...[
                   const SizedBox(width: 10),
                   GestureDetector(
                     onTap: () {
-                      setState(() => _isFollowed = !_isFollowed);
-                      // TODO: POST /api/follows { host_id: widget.host.userId }
+                      ref
+                          .read(followNotifierProvider.notifier)
+                          .toggle(widget.host.userId);
                     },
-                    child: AnimatedContainer(
-                      duration: const Duration(
-                        milliseconds: 200,
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _isFollowed
-                            ? Colors.white.withValues(
-                                alpha: 0.15,
-                              )
-                            : Colors.pink,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        _isFollowed ? 'Following' : 'Follow',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                    child: Builder(
+                      builder: (context) {
+                        final isFollowed = ref.watch(
+                          followStateProvider(
+                            widget.host.userId,
+                          ),
+                        );
+                        return AnimatedContainer(
+                          duration: const Duration(
+                            milliseconds: 200,
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isFollowed
+                                ? Colors.white.withValues(
+                                    alpha: 0.15,
+                                  )
+                                : Colors.pink,
+                            borderRadius: BorderRadius.circular(
+                              20,
+                            ),
+                          ),
+                          child: Text(
+                            isFollowed ? 'Following' : 'Follow',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],
               ],
             ),
           ),
-
           const Spacer(),
-
-          // Live timer
           _glassChip(
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -610,10 +649,7 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
               ],
             ),
           ),
-
           const SizedBox(width: 10),
-
-          // End call
           GestureDetector(
             onTap: () => _endCall(),
             child: Container(
@@ -630,106 +666,6 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // ── Coin bar ──────────────────────────────────────────────────────────────
-  Widget _buildCoinBar() {
-    final safePad = MediaQuery.of(context).padding.top;
-    return Positioned(
-      top: safePad + 68,
-      left: 16,
-      child: _glassChip(
-        color: _isLowCoins
-            ? Colors.red.withValues(alpha: 0.6)
-            : Colors.black54,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.monetization_on,
-              color: Colors.amber,
-              size: 15,
-            ),
-            const SizedBox(width: 5),
-            Text(
-              _coinsRemaining.toString(),
-              style: GoogleFonts.lato(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-              ),
-            ),
-            Text(
-              '  •  ${widget.host.priceCoins}/min',
-              style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 11,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Low coin warning ──────────────────────────────────────────────────────
-  Widget _buildLowCoinBanner() {
-    return Positioned(
-      top: MediaQuery.of(context).padding.top + 108,
-      left: 16,
-      right: 16,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 9,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.orange.shade800.withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.warning_amber_rounded,
-              color: Colors.white,
-              size: 16,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Low balance! Recharge to keep the call going.',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            GestureDetector(
-              onTap: () => _showRechargeSheet(),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  'Recharge',
-                  style: TextStyle(
-                    color: Colors.orange.shade800,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -772,31 +708,24 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
       right: 16,
       child: Column(
         children: [
-          // Recharge / coins
           _actionButton(
             icon: Icons.monetization_on,
             color: Colors.amber,
             onTap: _showRechargeSheet,
           ),
           const SizedBox(height: 14),
-
-          // Gift
           _actionButton(
             icon: Icons.card_giftcard,
             color: Colors.pinkAccent,
             onTap: _showGiftSheet,
           ),
           const SizedBox(height: 14),
-
-          // Switch camera
           _actionButton(
             icon: Icons.cameraswitch_rounded,
             color: Colors.white24,
             onTap: _agora.switchCamera,
           ),
           const SizedBox(height: 14),
-
-          // Mute audio toggle
           ValueListenableBuilder<bool>(
             valueListenable: _agora.isAudioMuted,
             builder: (_, muted, __) => _actionButton(
@@ -808,8 +737,6 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
             ),
           ),
           const SizedBox(height: 14),
-
-          // Beauty effects
           _actionButton(
             icon: Icons.auto_fix_high_rounded,
             color: Colors.purpleAccent.withValues(alpha: 0.8),
@@ -954,32 +881,101 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
 
   // ── Call ended summary overlay ────────────────────────────────────────────
   Widget _buildCallEndedOverlay() {
+    final bool isHost = widget.localUid == 2;
+
+    // Auto-dismiss after 5 seconds
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted && _callEnded) {
+        SystemChrome.setEnabledSystemUIMode(
+          SystemUiMode.edgeToEdge,
+        );
+        Navigator.of(context).pop();
+      }
+    });
+
     return Container(
-      color: Colors.black87,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xCC000000), Color(0xFF000000)],
+        ),
+      ),
       child: Center(
         child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 32),
+          margin: const EdgeInsets.symmetric(horizontal: 28),
           padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A2E),
-            borderRadius: BorderRadius.circular(24),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF2D1B3D), Color(0xFF1A1A2E)],
+            ),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.08),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.pink.withOpacity(0.15),
+                blurRadius: 40,
+                spreadRadius: 2,
+              ),
+            ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.pink.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.call_end,
-                  color: Colors.pink,
-                  size: 36,
-                ),
+              // Avatar + checkmark
+              Stack(
+                alignment: Alignment.bottomRight,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.pink.withOpacity(0.3),
+                          Colors.purple.withOpacity(0.2),
+                        ],
+                      ),
+                    ),
+                    child: CircleAvatar(
+                      radius: 36,
+                      backgroundColor: Colors.pink.withOpacity(
+                        0.15,
+                      ),
+                      backgroundImage:
+                          widget.host.profilePhotoUrl != null
+                          ? NetworkImage(
+                              widget.host.profilePhotoUrl!,
+                            )
+                          : null,
+                      child: widget.host.profilePhotoUrl == null
+                          ? const Icon(
+                              Icons.person,
+                              size: 36,
+                              color: Colors.white38,
+                            )
+                          : null,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check,
+                      size: 12,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               Text(
                 'Call Ended',
                 style: GoogleFonts.lato(
@@ -988,33 +984,68 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 'with ${widget.host.displayName}',
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 14,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.4),
+                  fontSize: 13,
                 ),
               ),
               const SizedBox(height: 24),
-              _summaryRow(
-                Icons.timer_outlined,
-                'Duration',
-                _formattedDuration,
+              // Stats row
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.06),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment:
+                      MainAxisAlignment.spaceAround,
+                  children: [
+                    _summaryStatColumn(
+                      Icons.timer_outlined,
+                      Colors.blue.shade300,
+                      'Duration',
+                      _formattedDuration,
+                    ),
+                    Container(
+                      width: 1,
+                      height: 36,
+                      color: Colors.white.withOpacity(0.08),
+                    ),
+                    _summaryStatColumn(
+                      isHost
+                          ? Icons.arrow_downward
+                          : Icons.arrow_upward,
+                      isHost
+                          ? Colors.green.shade300
+                          : Colors.amber.shade300,
+                      isHost ? 'Earned' : 'Spent',
+                      '$_coinsSpent coins',
+                    ),
+                    Container(
+                      width: 1,
+                      height: 36,
+                      color: Colors.white.withOpacity(0.08),
+                    ),
+                    _summaryStatColumn(
+                      Icons.account_balance_wallet_outlined,
+                      Colors.purple.shade200,
+                      'Balance',
+                      '$_coinsRemaining',
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 10),
-              _summaryRow(
-                Icons.monetization_on,
-                'Coins Spent',
-                '$_coinsSpent coins',
-              ),
-              const SizedBox(height: 10),
-              _summaryRow(
-                Icons.account_balance_wallet_outlined,
-                'Remaining',
-                '$_coinsRemaining coins',
-              ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
@@ -1042,6 +1073,14 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
                   ),
                 ),
               ),
+              const SizedBox(height: 8),
+              Text(
+                'Auto-closing in 5 seconds...',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.2),
+                  fontSize: 11,
+                ),
+              ),
             ],
           ),
         ),
@@ -1049,9 +1088,38 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
     );
   }
 
+  Widget _summaryStatColumn(
+    IconData icon,
+    Color iconColor,
+    String label,
+    String value,
+  ) {
+    return Column(
+      children: [
+        Icon(icon, color: iconColor, size: 20),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.4),
+            fontSize: 11,
+          ),
+        ),
+      ],
+    );
+  }
+
   // ── Beauty effects sheet ─────────────────────────────────────────────────
   void _showBeautySheet() {
-    // TODO: integrate Banuba or BytePlus SDK for real beauty effects
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1175,109 +1243,307 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => Container(
-        height: MediaQuery.of(context).size.height * 0.52,
-        decoration: const BoxDecoration(
-          color: Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(24),
-          ),
-        ),
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
+      builder: (_) => Consumer(
+        builder: (context, sheetRef, _) {
+          final catalogAsync = sheetRef.watch(
+            giftCatalogProvider,
+          );
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.55,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF2D1B3D), Color(0xFF1A1A2E)],
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Send a Gift',
-              style: GoogleFonts.lato(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
               ),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: GridView.builder(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
+              border: Border(
+                top: BorderSide(
+                  color: Colors.pink.withOpacity(0.3),
+                  width: 1,
                 ),
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 4,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.85,
+              ),
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.auto_awesome,
+                      color: Colors.amber,
+                      size: 18,
                     ),
-                itemCount: GiftAssets.all.length,
-                itemBuilder: (_, i) {
-                  final asset = GiftAssets.all[i];
-                  final name = asset
-                      .split('/')
-                      .last
-                      .replaceAll('.png', '')
-                      .replaceAll('_', ' ');
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.pop(context);
-                      // TODO: POST /api/gifts/send { hostId, giftAsset: asset }
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Gift sent! 🎁'),
-                          backgroundColor: Colors.pink,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(
-                              12,
-                            ),
-                          ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Send a Gift',
+                      style: GoogleFonts.lato(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.auto_awesome,
+                      color: Colors.amber,
+                      size: 18,
+                    ),
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'to ${widget.host.displayName}',
+                    style: TextStyle(
+                      color: Colors.white38,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: catalogAsync.when(
+                    loading: () => const Center(
+                      child: CircularProgressIndicator(
+                        color: Colors.pink,
+                      ),
+                    ),
+                    error: (_, __) => const Center(
+                      child: Text(
+                        'Could not load gifts',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    ),
+                    data: (catalogData) {
+                      return GridView.builder(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
                         ),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 4,
+                              mainAxisSpacing: 14,
+                              crossAxisSpacing: 10,
+                              childAspectRatio: 0.68,
+                            ),
+                        itemCount: catalogData.length,
+                        itemBuilder: (_, i) {
+                          final g = catalogData[i];
+                          final giftId = '${g['id']}';
+                          final name = g['name'] as String;
+                          final assetPath =
+                              g['media_url'] as String;
+                          final coinCost =
+                              (g['coin_cost'] as num).toInt();
+                          return GestureDetector(
+                            onTap: () {
+                              Navigator.pop(context);
+                              _sendGiftFromCall(
+                                giftId,
+                                assetPath,
+                                coinCost,
+                                name,
+                              );
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(
+                                  0.05,
+                                ),
+                                borderRadius:
+                                    BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: Colors.white
+                                      .withOpacity(0.08),
+                                ),
+                              ),
+                              padding: const EdgeInsets.all(6),
+                              child: Column(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.center,
+                                children: [
+                                  Expanded(
+                                    child: Image.network(
+                                      assetPath,
+                                      fit: BoxFit.contain,
+                                      errorBuilder:
+                                          (
+                                            _,
+                                            __,
+                                            ___,
+                                          ) => const Icon(
+                                            Icons.card_giftcard,
+                                            color: Colors.pink,
+                                            size: 28,
+                                          ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    name,
+                                    maxLines: 1,
+                                    overflow:
+                                        TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 10,
+                                      fontWeight:
+                                          FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Container(
+                                    padding:
+                                        const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber
+                                          .withOpacity(0.15),
+                                      borderRadius:
+                                          BorderRadius.circular(
+                                            8,
+                                          ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize:
+                                          MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.monetization_on,
+                                          color: Colors.amber,
+                                          size: 10,
+                                        ),
+                                        const SizedBox(width: 2),
+                                        Text(
+                                          '$coinCost',
+                                          style: const TextStyle(
+                                            color: Colors.amber,
+                                            fontSize: 10,
+                                            fontWeight:
+                                                FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
                       );
                     },
-                    child: Column(
-                      mainAxisAlignment:
-                          MainAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Image.asset(
-                            asset,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) =>
-                                const Icon(
-                                  Icons.card_giftcard,
-                                  color: Colors.pink,
-                                  size: 32,
-                                ),
-                          ),
+                  ),
+                ),
+                // Balance bar at bottom
+                Container(
+                  margin: const EdgeInsets.fromLTRB(
+                    16,
+                    8,
+                    16,
+                    16,
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.monetization_on,
+                        color: Colors.amber,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Balance: $_coinsRemaining coins',
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-          ],
-        ),
+          );
+        },
       ),
     );
+  }
+
+  Future<void> _sendGiftFromCall(
+    String giftId,
+    String assetPath,
+    int coinCost,
+    String giftName,
+  ) async {
+    final giftApi = ref.read(giftApiServiceProvider);
+    final res = await giftApi.sendGift(
+      receiverId: widget.host.userId,
+      giftId: giftId,
+      callSessionId: widget.sessionId,
+    );
+
+    if (!mounted) return;
+
+    if (!res.ok) {
+      final error = res.error ?? 'Could not send gift';
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            duration: const Duration(milliseconds: 1500),
+            content: Text(
+              error.contains('Insufficient')
+                  ? 'Not enough coins! This gift costs $coinCost coins.'
+                  : error,
+            ),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      return;
+    }
+
+    // Deduct coins locally for instant UI feedback
+    setState(() {
+      _coinsRemaining = (_coinsRemaining - coinCost).clamp(
+        0,
+        9999999,
+      );
+      // Show gift in chat overlay
+      _chatMessages.add(
+        _ChatMessage(text: '🎁 Sent $giftName', isLocal: true),
+      );
+    });
+
+    ref.read(walletBalanceProvider.notifier).refresh();
   }
 
   // ── Recharge sheet ────────────────────────────────────────────────────────
@@ -1286,13 +1552,23 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(24),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF1E1233), Color(0xFF1A1A2E)],
+          ),
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(28),
+          ),
+          border: Border(
+            top: BorderSide(
+              color: Colors.amber.withOpacity(0.3),
+              width: 1,
+            ),
           ),
         ),
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1305,49 +1581,70 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'Wallet Balance',
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
+            // Coin balance display
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.amber.withOpacity(0.12),
+                    Colors.amber.withOpacity(0.04),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.amber.withOpacity(0.15),
+                ),
+              ),
+              child: Column(
+                children: [
+                  const Text(
+                    'Your Balance',
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.monetization_on,
+                        color: Colors.amber,
+                        size: 30,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _coinsRemaining.toString(),
+                        style: GoogleFonts.lato(
+                          color: Colors.white,
+                          fontSize: 34,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.monetization_on,
-                  color: Colors.amber,
-                  size: 28,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _coinsRemaining.toString(),
-                  style: GoogleFonts.lato(
-                    color: Colors.white,
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 36, color: Colors.white10),
-            const Align(
+            const SizedBox(height: 20),
+            Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 'Quick Recharge',
-                style: TextStyle(
+                style: GoogleFonts.lato(
                   color: Colors.white,
-                  fontSize: 16,
+                  fontSize: 15,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ),
-            const SizedBox(height: 14),
-            _rechargeOption(500, '₹49'),
-            _rechargeOption(1200, '₹99'),
-            _rechargeOption(3000, '₹249'),
+            const SizedBox(height: 12),
+            _rechargeOption(500, '₹49', false),
+            _rechargeOption(1200, '₹99', true),
+            _rechargeOption(3000, '₹249', false),
             const SizedBox(height: 8),
           ],
         ),
@@ -1355,54 +1652,95 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
     );
   }
 
-  Widget _rechargeOption(int coins, String price) {
+  Widget _rechargeOption(
+    int coins,
+    String price,
+    bool isBestValue,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: InkWell(
         onTap: () {
           Navigator.pop(context);
           // TODO: launch Razorpay/Stripe payment flow
-          // On success: setState(() => _coinsRemaining += coins);
         },
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.symmetric(
             horizontal: 16,
-            vertical: 12,
+            vertical: 14,
           ),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white10),
+            color: isBestValue
+                ? Colors.amber.withOpacity(0.08)
+                : Colors.white.withOpacity(0.04),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isBestValue
+                  ? Colors.amber.withOpacity(0.3)
+                  : Colors.white.withOpacity(0.08),
+            ),
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.monetization_on,
-                    color: Colors.amber,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    '$coins Coins',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.monetization_on,
+                  color: Colors.amber,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$coins Coins',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                ],
+                    if (isBestValue)
+                      const Text(
+                        'Best value',
+                        style: TextStyle(
+                          color: Colors.amber,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
+                ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 6,
+                  horizontal: 16,
+                  vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.amber,
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFFFFB800),
+                      Color(0xFFFF8C00),
+                    ],
+                  ),
                   borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.amber.withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Text(
                   price,
@@ -1452,39 +1790,13 @@ class _OngoingCallScreenState extends State<OngoingCallScreen>
       ),
     );
   }
-
-  Widget _summaryRow(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, color: Colors.white38, size: 18),
-        const SizedBox(width: 10),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white54,
-            fontSize: 14,
-          ),
-        ),
-        const Spacer(),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------
-// Pulsing dots — shown while waiting for host to join
+// Pulsing dots
 // ---------------------------------------------------------------------------
 class _PulsingDots extends StatefulWidget {
   const _PulsingDots();
-
   @override
   State<_PulsingDots> createState() => _PulsingDotsState();
 }

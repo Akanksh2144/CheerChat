@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:io';
 
@@ -8,11 +7,20 @@ import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cheerchat/constants/gift_constants.dart';
+// import 'package:cheerchat/constants/gift_constants.dart';
 import 'package:cheerchat/constants/lottie_constants.dart';
+import 'package:cheerchat/models/host_model.dart';
+import 'package:cheerchat/providers/hosts_provider.dart';
+import 'package:cheerchat/providers/wallet_provider.dart';
+import 'package:cheerchat/services/api_service.dart';
+import 'package:cheerchat/screens/outgoing_call_screen.dart';
+import 'package:cheerchat/services/call_api_service.dart';
 import 'package:cheerchat/services/chat_services.dart';
+import 'package:cheerchat/services/gift_api_service.dart';
+import 'package:cheerchat/services/unlock_service.dart';
 import 'package:cheerchat/theme/app_colors.dart';
 import 'package:lottie/lottie.dart';
 
@@ -21,40 +29,20 @@ import 'package:lottie/lottie.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _GiftItem {
-  const _GiftItem(this.path, this.name, this.coins);
-  final String path;
+  const _GiftItem(this.id, this.path, this.name, this.coins);
+  final String id; // server UUID from gift_catalog
+  final String path; // local asset path
   final String name;
   final int coins;
 }
 
-const List<_GiftItem> _kGifts = [
-  _GiftItem(GiftAssets.chocolate, 'Chocolate', 10),
-  _GiftItem(GiftAssets.burger, 'Burger', 15),
-  _GiftItem(GiftAssets.pizza, 'Pizza', 20),
-  _GiftItem(GiftAssets.frock, 'Frock', 30),
-  _GiftItem(GiftAssets.handbag, 'Handbag', 50),
-  _GiftItem(GiftAssets.sunglasses, 'Sunnies', 40),
-  _GiftItem(GiftAssets.kiss, 'Kiss', 25),
-  _GiftItem(GiftAssets.lehenga, 'Lehenga', 80),
-  _GiftItem(GiftAssets.lipstick, 'Lipstick', 35),
-  _GiftItem(GiftAssets.makeupkit, 'Makeup Kit', 60),
-  _GiftItem(GiftAssets.necklace, 'Necklace', 100),
-  _GiftItem(GiftAssets.scarf, 'Scarf', 30),
-  _GiftItem(GiftAssets.sneakers, 'Sneakers', 55),
-  _GiftItem(GiftAssets.teddy, 'Teddy', 45),
-  _GiftItem(GiftAssets.vodka, 'Vodka', 70),
-  _GiftItem(GiftAssets.villa, 'Villa', 500),
-  _GiftItem(GiftAssets.tajmahal, 'Taj Mahal', 999),
-  _GiftItem(GiftAssets.pool, 'Pool', 800),
-  _GiftItem(GiftAssets.porsche, 'Porsche', 750),
-  _GiftItem(GiftAssets.jetboat, 'Jet Boat', 600),
-];
+// No more hardcoded _kGifts — fetched from GET /api/gifts at runtime.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // VERSION B — avatar left, name + detail row (country · age · price)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class ChatScreen extends StatefulWidget {
+class ChatScreen extends ConsumerStatefulWidget {
   final String otherUserId;
   final String otherUserName;
   final String profileImage;
@@ -62,6 +50,9 @@ class ChatScreen extends StatefulWidget {
   final String? countryEmoji; // e.g. "🇮🇳"
   final int? age; // e.g. 24
   final int? priceCoins; // e.g. 50  (coins/min)
+  /// PostgreSQL UUID of the host — needed for unlock API.
+  /// Null when opened from inbox (already unlocked).
+  final String? pgUserId;
 
   const ChatScreen({
     super.key,
@@ -71,22 +62,28 @@ class ChatScreen extends StatefulWidget {
     this.countryEmoji,
     this.age,
     this.priceCoins,
+    this.pgUserId,
   });
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen>
+class _ChatScreenState extends ConsumerState<ChatScreen>
     with WidgetsBindingObserver {
   final ChatService _chatService = ChatService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   StreamSubscription? _messageSubscription;
-  StreamSubscription<DocumentSnapshot>? _roomSubscription;
 
   bool _isLocked = true;
-  bool _hasUnlockedThisSession = false;
+  bool _isCheckingUnlock = true;
+  bool _isUnlocking = false;
+  int _unlockFee = 20;
+  int _unlockDays = 7;
+
+  /// Resolved PostgreSQL UUID — either from widget.pgUserId or looked up from hosts.
+  String? _pgUserId;
 
   late ChatUser _currentUser;
   late ChatUser _otherUser;
@@ -110,29 +107,250 @@ class _ChatScreenState extends State<ChatScreen>
     }
   }
 
+  // ── Resolve pgUserId from Firebase UID ─────────────────────────────────────
+
+  Future<void> _resolvePgUserId() async {
+    debugPrint(
+      '[Chat] Resolving pgUserId for otherUserId=${widget.otherUserId}',
+    );
+
+    // Try 1: Look up from cached hosts list
+    final hostsAsync = ref.read(hostsProvider);
+    hostsAsync.whenData((hosts) {
+      for (final host in hosts) {
+        debugPrint(
+          '[Chat]   Host ${host.displayName}: firebaseUid=${host.firebaseUid}, userId=${host.userId}',
+        );
+        if (host.firebaseUid == widget.otherUserId) {
+          if (mounted) setState(() => _pgUserId = host.userId);
+          debugPrint(
+            '[Chat] Resolved pgUserId from hosts: ${host.userId}',
+          );
+          return;
+        }
+      }
+      debugPrint(
+        '[Chat] No match found in ${hosts.length} cached hosts',
+      );
+    });
+
+    if (_pgUserId != null) {
+      _checkUnlockStatus();
+      return;
+    }
+
+    // Try 2: Ask backend to resolve Firebase UID → PG UUID
+    try {
+      final api = ref.read(apiServiceProvider);
+      final res = await api.get(
+        '/api/users/resolve',
+        query: {'firebase_uid': widget.otherUserId},
+      );
+      if (res.ok && res.data['user_id'] != null && mounted) {
+        setState(
+          () => _pgUserId = res.data['user_id'] as String,
+        );
+        debugPrint(
+          '[Chat] Resolved pgUserId from API: $_pgUserId',
+        );
+        _checkUnlockStatus();
+      }
+    } catch (e) {
+      debugPrint('[Chat] Could not resolve pgUserId: $e');
+    }
+  }
+
   // ── Sending ───────────────────────────────────────────────────────────────
+
+  Future<void> _checkUnlockStatus() async {
+    try {
+      final unlockSvc = ref.read(unlockServiceProvider);
+      final unlocked = await unlockSvc.isUnlocked(_pgUserId!);
+      if (!unlocked) {
+        final fee = await unlockSvc.getFee();
+        _unlockFee = fee['fee_coins'] ?? 20;
+        _unlockDays = fee['duration_days'] ?? 7;
+      }
+      if (mounted) {
+        setState(() {
+          _isLocked = !unlocked;
+          _isCheckingUnlock = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLocked = true;
+          _isCheckingUnlock = false;
+        });
+      }
+    }
+  }
+
+  Future<bool> _showUnlockDialog() async {
+    final c = AppColors.of(context);
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? c.card : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            Icon(
+              Icons.lock_open_rounded,
+              color: c.pink,
+              size: 22,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Unlock Chat',
+              style: GoogleFonts.poppins(
+                color: c.textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: 17,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Unlock messaging with ${widget.otherUserName} for $_unlockDays days.',
+              style: GoogleFonts.poppins(
+                color: c.textSecondary,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
+              decoration: BoxDecoration(
+                color: c.pink.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: c.pink.withOpacity(0.2),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.monetization_on,
+                    color: Colors.amber,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$_unlockFee coins',
+                    style: GoogleFonts.poppins(
+                      color: c.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: c.textSecondary),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: c.pink,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text('Unlock'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || _pgUserId == null) return false;
+
+    setState(() => _isUnlocking = true);
+
+    try {
+      final unlockSvc = ref.read(unlockServiceProvider);
+      final res = await unlockSvc.unlock(_pgUserId!);
+
+      if (!mounted) return false;
+
+      if (!res.ok) {
+        final error = res.error ?? 'Could not unlock chat';
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              duration: const Duration(milliseconds: 1500),
+              content: Text(
+                error.contains('Insufficient')
+                    ? 'Not enough coins! You need $_unlockFee coins.'
+                    : error,
+              ),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        return false;
+      }
+
+      // Success — update local state and refresh wallet
+      setState(() => _isLocked = false);
+      ref.read(walletBalanceProvider.notifier).refresh();
+      return true;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              duration: const Duration(milliseconds: 1500),
+              content: const Text(
+                'Connection error. Please try again.',
+              ),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => _isUnlocking = false);
+    }
+  }
 
   void _sendMessage(ChatMessage message) async {
     if (message.text.trim().isEmpty) return;
     if (_isLocked) {
-      final currentUserId = _auth.currentUser!.uid;
-      final chatRoomId = _chatService.getChatRoomId(
-        currentUserId,
-        widget.otherUserId,
-      );
-      await FirebaseFirestore.instance
-          .collection('conversations')
-          .doc(chatRoomId)
-          .update({
-            'isUnlocked': true,
-            'expiryTime': DateTime.now().add(
-              const Duration(days: 7),
-            ),
-          });
-      setState(() {
-        _isLocked = false;
-        _hasUnlockedThisSession = true;
-      });
+      // Show unlock dialog — only proceed if user pays
+      final unlocked = await _showUnlockDialog();
+      if (!unlocked) return;
     }
     await _chatService.sendMessage(
       receiverId: widget.otherUserId,
@@ -143,15 +361,88 @@ class _ChatScreenState extends State<ChatScreen>
     _scrollToBottom();
   }
 
-  void _sendGift(String assetPath) {
-    _chatService.sendMessage(
-      receiverId: widget.otherUserId,
-      text: assetPath,
-      type: 'gift',
-      otherUserName: widget.otherUserName,
-      otherUserProfileImage: widget.profileImage,
-    );
-    _scrollToBottom();
+  Future<void> _sendGift(
+    String giftId,
+    String assetPath,
+    int coinCost,
+  ) async {
+    try {
+      // 1. Call backend to deduct coins and record transaction
+      final giftApi = ref.read(giftApiServiceProvider);
+      if (_pgUserId == null) {
+        debugPrint('[Gift] pgUserId is null, cannot send');
+        return;
+      }
+      debugPrint(
+        '[Gift] Sending giftId=$giftId to receiverId=${_pgUserId}',
+      );
+
+      final res = await giftApi.sendGift(
+        receiverId: _pgUserId!,
+        giftId: giftId,
+      );
+
+      debugPrint(
+        '[Gift] Response: ok=${res.ok}, error=${res.error}, data=${res.data}',
+      );
+
+      if (!mounted) return;
+
+      if (!res.ok) {
+        final error = res.error ?? 'Could not send gift';
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              duration: const Duration(milliseconds: 1500),
+              content: Text(
+                error.contains('Insufficient')
+                    ? 'Not enough coins! This gift costs $coinCost coins.'
+                    : error,
+              ),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        return;
+      }
+
+      // 2. Send Firestore chat message (visual bubble)
+      _chatService.sendMessage(
+        receiverId: widget.otherUserId,
+        text: assetPath,
+        type: 'gift',
+        otherUserName: widget.otherUserName,
+        otherUserProfileImage: widget.profileImage,
+      );
+      _scrollToBottom();
+
+      // 3. Refresh wallet balance
+      ref.read(walletBalanceProvider.notifier).refresh();
+
+      debugPrint('[Gift] Sent successfully');
+    } catch (e, st) {
+      debugPrint('[Gift] Exception: $e');
+      debugPrint('[Gift] Stack: $st');
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              duration: const Duration(milliseconds: 1500),
+              content: Text('Gift failed: $e'),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+      }
+    }
   }
 
   void _sendLottie(String assetPath) async {
@@ -376,11 +667,49 @@ class _ChatScreenState extends State<ChatScreen>
 
   // ── Gift picker ───────────────────────────────────────────────────────────
 
-  void _openGiftPicker() {
+  void _openGiftPicker() async {
     final c = AppColors.of(context);
     final isDark =
         Theme.of(context).brightness == Brightness.dark;
-    String? selected;
+
+    // Pre-fetch catalog — show inline spinner if needed
+    List<_GiftItem> gifts;
+    try {
+      final catalogData = await ref
+          .read(giftApiServiceProvider)
+          .getCatalog();
+      gifts = catalogData
+          .map(
+            (g) => _GiftItem(
+              '${g['id']}',
+              g['media_url'] as String,
+              g['name'] as String,
+              (g['coin_cost'] as num).toInt(),
+            ),
+          )
+          .toList();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              duration: const Duration(milliseconds: 1500),
+              content: const Text('Could not load gifts'),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+      }
+      return;
+    }
+
+    if (!mounted || gifts.isEmpty) return;
+
+    String? selectedId;
 
     showModalBottomSheet(
       context: context,
@@ -388,8 +717,11 @@ class _ChatScreenState extends State<ChatScreen>
       isScrollControlled: true,
       builder: (sheetCtx) => StatefulBuilder(
         builder: (ctx, set) {
-          final sel = selected != null
-              ? _kGifts.firstWhere((g) => g.path == selected)
+          final sel = selectedId != null
+              ? gifts.cast<_GiftItem?>().firstWhere(
+                  (g) => g!.id == selectedId,
+                  orElse: () => null,
+                )
               : null;
           return Container(
             height: MediaQuery.of(context).size.height * 0.55,
@@ -410,7 +742,6 @@ class _ChatScreenState extends State<ChatScreen>
             ),
             child: Column(
               children: [
-                // Handle
                 const SizedBox(height: 12),
                 Container(
                   width: 40,
@@ -421,7 +752,6 @@ class _ChatScreenState extends State<ChatScreen>
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Header row
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,
@@ -442,7 +772,6 @@ class _ChatScreenState extends State<ChatScreen>
                         ),
                       ),
                       const Spacer(),
-                      // Animated cost badge
                       AnimatedSwitcher(
                         duration: const Duration(
                           milliseconds: 180,
@@ -498,7 +827,6 @@ class _ChatScreenState extends State<ChatScreen>
                 const SizedBox(height: 14),
                 Divider(height: 1, color: c.divider),
                 const SizedBox(height: 8),
-                // Gift grid
                 Expanded(
                   child: GridView.builder(
                     padding: const EdgeInsets.fromLTRB(
@@ -514,25 +842,24 @@ class _ChatScreenState extends State<ChatScreen>
                           crossAxisSpacing: 10,
                           childAspectRatio: 0.78,
                         ),
-                    itemCount: _kGifts.length,
+                    itemCount: gifts.length,
                     itemBuilder: (_, i) {
-                      final gift = _kGifts[i];
-                      final isSel = selected == gift.path;
+                      final gift = gifts[i];
+                      final isSel = selectedId == gift.id;
                       return _GiftCard(
                         gift: gift,
                         isSelected: isSel,
                         isDark: isDark,
                         c: c,
                         onTap: () => set(
-                          () => selected = isSel
+                          () => selectedId = isSel
                               ? null
-                              : gift.path,
+                              : gift.id,
                         ),
                       );
                     },
                   ),
                 ),
-                // Send button
                 Padding(
                   padding: EdgeInsets.fromLTRB(
                     20,
@@ -550,7 +877,7 @@ class _ChatScreenState extends State<ChatScreen>
                             child: child,
                           ),
                         ),
-                    child: selected == null
+                    child: sel == null
                         ? SizedBox(
                             key: const ValueKey('empty'),
                             width: double.infinity,
@@ -609,7 +936,11 @@ class _ChatScreenState extends State<ChatScreen>
                               child: ElevatedButton(
                                 onPressed: () {
                                   Navigator.pop(sheetCtx);
-                                  _sendGift(selected!);
+                                  _sendGift(
+                                    sel.id,
+                                    sel.path,
+                                    sel.coins,
+                                  );
                                 },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor:
@@ -635,7 +966,7 @@ class _ChatScreenState extends State<ChatScreen>
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
-                                      'Send ${sel!.name}',
+                                      'Send ${sel.name}',
                                       style: GoogleFonts.poppins(
                                         color: Colors.white,
                                         fontSize: 15,
@@ -684,6 +1015,144 @@ class _ChatScreenState extends State<ChatScreen>
         },
       ),
     );
+  }
+
+  // ── Start call from chat ───────────────────────────────────────────────
+
+  bool _isStartingCall = false;
+
+  Future<void> _startCallFromChat() async {
+    if (_isStartingCall) return;
+    setState(() => _isStartingCall = true);
+
+    try {
+      final walletState = ref.read(walletBalanceProvider);
+      final coins = walletState.asData?.value?.coinBalance;
+      final priceCoins = widget.priceCoins ?? 50;
+
+      // Only do local check if wallet is loaded — otherwise let server validate
+      if (coins != null && coins < priceCoins) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(
+              SnackBar(
+                duration: const Duration(milliseconds: 1500),
+                content: Text(
+                  'Not enough coins! You need $priceCoins coins/min.',
+                ),
+                backgroundColor: Colors.red.shade700,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            );
+        }
+        return;
+      }
+
+      final callApi = ref.read(callApiServiceProvider);
+
+      if (_pgUserId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(
+              SnackBar(
+                duration: const Duration(milliseconds: 1500),
+                content: const Text(
+                  'Cannot start call — host data missing.',
+                ),
+                backgroundColor: Colors.red.shade700,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            );
+        }
+        return;
+      }
+
+      final res = await callApi.startCall(hostId: _pgUserId!);
+
+      if (!mounted) return;
+
+      if (!res.ok) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              duration: const Duration(milliseconds: 1500),
+              content: Text(res.error ?? 'Could not start call'),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        return;
+      }
+
+      final sessionId = res.data['session_id'] as String;
+      final channelName = res.data['channel_name'] as String;
+      final callerToken = res.data['caller_token'] as String;
+      final callerUid = res.data['caller_uid'] as int;
+      final pricePerMinute = res.data['price_per_minute'] as int;
+
+      // Construct minimal HostModel from chat screen params
+      final host = HostModel(
+        userId: _pgUserId!,
+        publicId: 0,
+        displayName: widget.otherUserName,
+        countryCode: widget.countryEmoji ?? 'UN',
+        language: '',
+        priceCoins: pricePerMinute,
+        level: 1,
+        status: HostStatus.online,
+        profilePhotoUrl: widget.profileImage.isNotEmpty
+            ? widget.profileImage
+            : null,
+      );
+
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).push(
+          MaterialPageRoute(
+            builder: (_) => OutgoingCallScreen(
+              host: host,
+              initialCoins: coins ?? 0,
+              sessionId: sessionId,
+              channelId: channelName,
+              token: callerToken,
+              callerUid: callerUid,
+            ),
+          ),
+        );
+        ref.read(walletBalanceProvider.notifier).refresh();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              duration: const Duration(milliseconds: 1500),
+              content: const Text(
+                'Connection error. Please try again.',
+              ),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+      }
+    } finally {
+      if (mounted) setState(() => _isStartingCall = false);
+    }
   }
 
   // ── Lottie picker ─────────────────────────────────────────────────────────
@@ -760,26 +1229,26 @@ class _ChatScreenState extends State<ChatScreen>
   @override
   void initState() {
     super.initState();
+
+    // Resolve pgUserId: use widget param if available, otherwise look up from hosts
+    _pgUserId = widget.pgUserId;
+    if (_pgUserId == null) {
+      _resolvePgUserId();
+    }
+
     final currentUserId = _auth.currentUser!.uid;
     final chatRoomId = _chatService.getChatRoomId(
       currentUserId,
       widget.otherUserId,
     );
 
-    _roomSubscription = FirebaseFirestore.instance
-        .collection('conversations')
-        .doc(chatRoomId)
-        .snapshots()
-        .listen((doc) {
-          if (!doc.exists) return;
-          final data = doc.data() as Map<String, dynamic>;
-          final bool isUnlocked = data['isUnlocked'] ?? false;
-          final Timestamp? expiryTs = data['expiryTime'];
-          bool locked = true;
-          if (isUnlocked && expiryTs != null)
-            locked = expiryTs.toDate().isBefore(DateTime.now());
-          if (mounted) setState(() => _isLocked = locked);
-        });
+    // ── Unlock gate — check via backend API ──────────────────────────────────
+    if (_pgUserId != null) {
+      _checkUnlockStatus();
+    } else {
+      _isLocked = false;
+      _isCheckingUnlock = false;
+    }
 
     _inputFocusNode.addListener(() {
       if (mounted)
@@ -802,11 +1271,8 @@ class _ChatScreenState extends State<ChatScreen>
       id: widget.otherUserId,
       profileImage: widget.profileImage,
     );
-    _chatService.initializeChatIfNew(
-      widget.otherUserId,
-      otherUserName: widget.otherUserName,
-      otherUserProfileImage: widget.profileImage,
-    );
+    // Room is created lazily on first message send (via ChatService.sendMessage
+    // which calls initializeChatIfNew internally). No need to create it here.
 
     _scrollController.addListener(() {
       if (_scrollController.hasClients) {
@@ -819,7 +1285,6 @@ class _ChatScreenState extends State<ChatScreen>
 
   @override
   void dispose() {
-    _roomSubscription?.cancel();
     _inputFocusNode.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _messageSubscription?.cancel();
@@ -975,7 +1440,11 @@ class _ChatScreenState extends State<ChatScreen>
           actions: [
             Padding(
               padding: const EdgeInsets.only(right: 4),
-              child: _CallButton(c: c),
+              child: _CallButton(
+                c: c,
+                isLoading: _isStartingCall,
+                onTap: _startCallFromChat,
+              ),
             ),
             IconButton(
               icon: Icon(
@@ -1041,14 +1510,8 @@ class _ChatScreenState extends State<ChatScreen>
     return StreamBuilder<QuerySnapshot>(
       stream: _chatService.getMessages(widget.otherUserId),
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              'Error loading messages',
-              style: TextStyle(color: c.textSecondary),
-            ),
-          );
-        }
+        // Permission denied or room doesn't exist yet — treat as empty.
+        // The room will be created when the first message is sent.
 
         final docs = snapshot.data?.docs ?? [];
         final List<ChatMessage> messages = docs.map((doc) {
@@ -1388,11 +1851,17 @@ class _ChatScreenState extends State<ChatScreen>
                                 padding: const EdgeInsets.all(
                                   10,
                                 ),
-                                child: Image.asset(
+                                child: Image.network(
                                   message.text,
                                   width: 70,
                                   height: 70,
                                   fit: BoxFit.contain,
+                                  errorBuilder: (_, __, ___) =>
+                                      const Icon(
+                                        Icons.card_giftcard,
+                                        size: 32,
+                                        color: Colors.pink,
+                                      ),
                                 ),
                               ),
                             ],
@@ -1701,13 +2170,19 @@ class _AppBarAvatar extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _CallButton extends StatelessWidget {
-  const _CallButton({required this.c});
+  const _CallButton({
+    required this.c,
+    required this.onTap,
+    this.isLoading = false,
+  });
   final AppColors c;
+  final VoidCallback onTap;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () {}, // TODO: push call screen
+      onTap: isLoading ? null : onTap,
       child: Container(
         width: 38,
         height: 38,
@@ -1729,11 +2204,19 @@ class _CallButton extends StatelessWidget {
             ),
           ],
         ),
-        child: const Icon(
-          Icons.videocam_rounded,
-          color: Colors.white,
-          size: 19,
-        ),
+        child: isLoading
+            ? const Padding(
+                padding: EdgeInsets.all(10),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(
+                Icons.videocam_rounded,
+                color: Colors.white,
+                size: 19,
+              ),
       ),
     );
   }
@@ -2012,9 +2495,14 @@ class _GiftCardState extends State<_GiftCard>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Expanded(
-                child: Image.asset(
+                child: Image.network(
                   widget.gift.path,
                   fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => Icon(
+                    Icons.card_giftcard,
+                    size: 32,
+                    color: widget.c.pink.withOpacity(0.4),
+                  ),
                 ),
               ),
               const SizedBox(height: 4),

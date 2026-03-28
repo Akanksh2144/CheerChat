@@ -734,8 +734,6 @@
 // stays consistent if AppColors.dark.pink is ever updated.
 
 import 'dart:math';
-import 'package:cheerchat/data/hosts_data.dart';
-import 'package:cheerchat/models/host_model.dart';
 import 'package:cheerchat/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -821,25 +819,14 @@ class _RandomCallScreenState extends State<RandomCallScreen>
   }
 
   Future<void> _matchHost() async {
-    final online = dummyHosts
-        .where((h) => h.status == HostStatus.online)
-        .toList();
+    // TODO: Replace with API call: callApiService.findRandomHost()
     await Future.delayed(const Duration(seconds: 4));
     if (!mounted) return;
 
-    if (online.isEmpty) {
-      _cancel();
-      _showSnackbar(
-        'No hosts available right now. Try again soon!',
-      );
-      return;
-    }
-
-    final host = online[Random().nextInt(online.length)];
     _cancel();
-    // TODO: Navigator.of(context, rootNavigator: true).push(
-    //         AppTransitions.scaleUp(OngoingCallScreen(host: host, ...)));
-    debugPrint('Matched: ${host.displayName}');
+    _showSnackbar(
+      'No hosts available right now. Try again soon!',
+    );
   }
 
   void _showSnackbar(String msg) {
@@ -1051,8 +1038,7 @@ class _RandomCallScreenState extends State<RandomCallScreen>
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${dummyHosts.where((h) => h.status == HostStatus.online).length}'
-                  ' hosts online now',
+                  'hosts online now',
                   style: GoogleFonts.dmSans(
                     color: (isDark ? Colors.white : Colors.black)
                         .withOpacity(0.45),
